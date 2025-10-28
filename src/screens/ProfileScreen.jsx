@@ -17,7 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
 import ImagePickerService from '../services/ImagePickerService';
-// import { cropResultManager } from '../utils/CropResultManager'; // Crop functionality removed
+import { cropResultManager } from '../utils/CropResultManager';
 import { testProfilePictureState } from '../utils/profilePictureTest';
 import UserAssetsService from '../services/UserAssetsService';
 import NavigationService from '../services/NavigationService';
@@ -38,6 +38,7 @@ import {
   loadExistingProfilePicture 
 } from '../store/slices/profilePictureSlice';
 import { setReligion as setGlobalReligion, saveMainSubToStorage } from '../store/slices/mainCategorySlice';
+import { uploadTemplate, selectUploadLoading, selectUploadError } from '../store/slices/cloudinaryTemplateSlice';
 import { DEFAULT_PROFILE_PICTURE, DEFAULT_PROFILE_PICTURE_FALLBACK, DEFAULT_PROFILE_PICTURE_DATA_URI, getDefaultProfilePicture } from '../constants/defaultProfilePicture';
 import { clearAllProfilePictures, clearAllProfileData } from '../utils/ProfilePictureManager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -64,6 +65,16 @@ const ProfileScreen = () => {
   const [isProcessingProfile, setIsProcessingProfile] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // Cloud upload state (local for banner)
+  const [isBannerUploading, setIsBannerUploading] = useState(false);
+  const [bannerUploadError, setBannerUploadError] = useState(null);
+  const [bannerCloudUrl, setBannerCloudUrl] = useState(null);
+
+  // Banner state (5:1 cropped image)
+  const [bannerEnabled, setBannerEnabled] = useState(false);
+  const [bannerUri, setBannerUri] = useState(null);
+  const [isBannerFocused, setIsBannerFocused] = useState(false);
 
   // Template preference state
   const RELIGIONS = ['hindu', 'muslim', 'christian'];
@@ -202,6 +213,44 @@ const ProfileScreen = () => {
     });
     console.log('📷 ProfileScreen: Current image source will be:', getImageSource());
   }, [profilePicture, profilePictureUri, lastUpdated]);
+
+  // Listen for banner crop results (from BannerCrop)
+  useEffect(() => {
+    const remove = cropResultManager.addListener((payload) => {
+      try {
+        if (payload?.photoNumber === 'banner' && payload?.croppedUri) {
+          setBannerUri(payload.croppedUri);
+          setBannerEnabled(true);
+        }
+      } catch {}
+    });
+    return () => { try { remove && remove(); } catch {} };
+  }, []);
+
+  // Auto-upload banner to cloud when a new bannerUri is set
+  useEffect(() => {
+    const upload = async () => {
+      if (!bannerUri) return;
+      try {
+        setIsBannerUploading(true);
+        setBannerUploadError(null);
+        setBannerCloudUrl(null);
+        const res = await dispatch(uploadTemplate({
+          imageUri: bannerUri,
+          category: 'banners',
+          templateData: { name: 'Profile Banner', ratio: '5:1' }
+        })).unwrap();
+        const tpl = res?.template || res;
+        const cloudUrl = tpl?.image_url || tpl?.secure_url || tpl?.url || null;
+        if (cloudUrl) setBannerCloudUrl(cloudUrl);
+      } catch (e) {
+        setBannerUploadError(e?.message || 'Upload failed');
+      } finally {
+        setIsBannerUploading(false);
+      }
+    };
+    upload();
+  }, [bannerUri, dispatch]);
 
   // Handle crop results when returning from crop screen - DISABLED (crop functionality removed)
   useEffect(() => {
@@ -410,6 +459,19 @@ const ProfileScreen = () => {
     setIsEditingName(true);
   };
 
+  const openGalleryForBanner = async () => {
+    try {
+      const picked = await ImagePickerService.pickImageFromGallery();
+      if (!picked || !picked.uri) return;
+      navigation.navigate('BannerCrop', {
+        uri: picked.uri,
+        photoNumber: 'banner',
+      });
+    } catch (e) {
+      Alert.alert('Error', 'Failed to select banner image.');
+    }
+  };
+
   const handleNameSave = () => {
     setIsEditingName(false);
     checkForChanges();
@@ -604,6 +666,52 @@ navigation.navigate('Crop', {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Banner Section */}
+        {bannerEnabled && bannerUri ? (
+          <View style={styles.bannerContainer}>
+            {isBannerUploading && (
+              <View style={styles.bannerUploadingOverlay}>
+                <ActivityIndicator size="small" color={COLORS.white} />
+                <Text style={styles.bannerUploadingText}>Uploading...</Text>
+              </View>
+            )}
+            {!isBannerUploading && bannerCloudUrl && (
+              <View style={styles.bannerUploadedBadge}>
+                <Text style={styles.bannerUploadedText}>Saved</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.bannerCloseButton}
+              onPress={() => {
+                try {
+                  setBannerUri(null);
+                  setBannerEnabled(false);
+                  setIsBannerFocused(false);
+                } catch {}
+              }}
+              activeOpacity={0.8}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Remove banner"
+            >
+              <Text style={styles.bannerCloseButtonText}>✕</Text>
+            </TouchableOpacity>
+            <Image
+              source={{ uri: bannerUri }}
+              style={styles.bannerImage}
+              resizeMode="cover"
+              onError={() => {}}
+            />
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.bannerAddButton}
+            onPress={openGalleryForBanner}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.bannerAddButtonText}>Add Banner</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Profile Picture Section */}
         <View style={styles.profileImageContainer}>
           <TouchableOpacity
@@ -1073,6 +1181,89 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.lg,
   },
+
+  // Banner styles
+  bannerContainer: {
+    width: screenWidth - (SPACING.lg * 2),
+    height: (screenWidth - (SPACING.lg * 2)) / 5,
+    borderRadius: 8,
+    overflow: 'hidden',
+    alignSelf: 'center',
+    marginBottom: SPACING.lg,
+    backgroundColor: COLORS.white,
+    elevation: 3,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  bannerCloseButton: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  bannerCloseButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  bannerAddButton: {
+    alignSelf: 'center',
+    backgroundColor: COLORS.accent,
+    borderRadius: 20,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+  },
+  bannerAddButtonText: {
+    ...TYPOGRAPHY.bodyLarge,
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+  bannerUploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    zIndex: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerUploadingText: {
+    color: COLORS.white,
+    marginTop: 6,
+    ...TYPOGRAPHY.bodySmall,
+  },
+  bannerUploadedBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 9,
+  },
+  bannerUploadedText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
   // Gradient Button Container
   gradientButton: {
     marginBottom: SPACING.md,

@@ -73,17 +73,28 @@ try {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// 5:1 banner crop area
-const CROP_WIDTH = Math.min(screenWidth * 0.95, screenWidth);
-const CROP_HEIGHT = Math.min(screenHeight * 0.6, Math.round(CROP_WIDTH / 5));
-
-// Image starts slightly larger than crop area so user can see edges
-const INITIAL_IMAGE_WIDTH = CROP_WIDTH * 1.2;
-const INITIAL_IMAGE_HEIGHT = INITIAL_IMAGE_WIDTH; // keep square base for simplicity
+const parseRatio = (r) => {
+  if (!r) return 5; // default 5:1
+  if (typeof r === 'number') return r > 0 ? r : 5;
+  if (typeof r === 'string') {
+    const parts = r.split(':');
+    const w = Number(parts[0]);
+    const h = parts[1] ? Number(parts[1]) : 1;
+    if (Number.isFinite(w) && Number.isFinite(h) && h > 0) return w / h;
+  }
+  return 5;
+};
 
 const BannerCrop = ({ route, navigation }) => {
-  const { uri, onCropDone } = route.params || {};
+  const { uri, onCropDone, ratio } = route.params || {};
   const viewShotRef = useRef();
+
+  // Compute dynamic crop area from ratio (width:height)
+  const ratioWH = parseRatio(ratio);
+  const cropWidth = Math.min(screenWidth * 0.95, screenWidth);
+  const cropHeight = Math.min(screenHeight * 0.6, Math.round(cropWidth / ratioWH));
+  const initialImageWidth = cropWidth * 1.2;
+  const initialImageHeight = initialImageWidth; // keep square base for simplicity
 
   // Gesture shared values
   const scale = useSharedValue(0.9);
@@ -134,10 +145,10 @@ const BannerCrop = ({ route, navigation }) => {
       const newTranslateX = savedTranslateX.value + event.translationX;
       const newTranslateY = savedTranslateY.value + event.translationY;
 
-      const currentWidth = INITIAL_IMAGE_WIDTH * scale.value;
-      const currentHeight = INITIAL_IMAGE_HEIGHT * scale.value;
-      const maxTranslateX = Math.max(0, (currentWidth - CROP_WIDTH) / 2);
-      const maxTranslateY = Math.max(0, (currentHeight - CROP_HEIGHT) / 2);
+      const currentWidth = initialImageWidth * scale.value;
+      const currentHeight = initialImageHeight * scale.value;
+      const maxTranslateX = Math.max(0, (currentWidth - cropWidth) / 2);
+      const maxTranslateY = Math.max(0, (currentHeight - cropHeight) / 2);
 
       translateX.value = Math.min(Math.max(newTranslateX, -maxTranslateX), maxTranslateX);
       translateY.value = Math.min(Math.max(newTranslateY, -maxTranslateY), maxTranslateY);
@@ -196,11 +207,11 @@ const BannerCrop = ({ route, navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.instructions}>Pinch to zoom • Drag to position • 5:1 Banner</Text>
+        <Text style={styles.instructions}>Pinch to zoom • Drag to position • {(typeof ratio === 'string' && ratio) || '5:1'} Banner</Text>
 
-        <View style={styles.cropContainer}>
+        <View style={[styles.cropContainer, { width: cropWidth, height: cropHeight }]}>
           <ViewShot ref={viewShotRef} options={{ format: 'jpg', quality: 1 }}>
-            <View style={styles.cropArea}>
+            <View style={[styles.cropArea, { width: cropWidth, height: cropHeight }]}>
               {!imageLoaded && (
                 <View style={styles.loadingOverlay}>
                   <ActivityIndicator size="large" color={COLORS.white} />
@@ -211,7 +222,7 @@ const BannerCrop = ({ route, navigation }) => {
               <GestureDetector gesture={combinedGesture}>
                 <Animated.Image
                   source={{ uri }}
-                  style={[styles.image, animatedStyle, !imageLoaded && { opacity: 0 }]}
+                  style={[styles.image, { width: initialImageWidth, height: initialImageHeight }, animatedStyle, !imageLoaded && { opacity: 0 }]}
                   resizeMode="contain"
                   onLoad={() => setImageLoaded(true)}
                   onError={() => {
@@ -224,7 +235,7 @@ const BannerCrop = ({ route, navigation }) => {
           </ViewShot>
 
           {/* Visual crop border - outside ViewShot so it's not captured */}
-          <View style={styles.cropBorderOverlay} pointerEvents="none" />
+          <View style={[styles.cropBorderOverlay, { width: cropWidth, height: cropHeight }]} pointerEvents="none" />
         </View>
 
         {error && (
@@ -270,12 +281,8 @@ const styles = StyleSheet.create({
   },
   cropContainer: {
     position: 'relative',
-    width: CROP_WIDTH,
-    height: CROP_HEIGHT,
   },
   cropArea: {
-    width: CROP_WIDTH,
-    height: CROP_HEIGHT,
     overflow: 'hidden',
     borderWidth: 0,
     borderColor: 'transparent',
@@ -293,16 +300,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    width: CROP_WIDTH,
-    height: CROP_HEIGHT,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.7)',
     borderStyle: 'dashed',
     borderRadius: SPACING.xs,
   },
   image: {
-    width: INITIAL_IMAGE_WIDTH,
-    height: INITIAL_IMAGE_HEIGHT,
   },
   cropButton: {
     backgroundColor: COLORS.accent,

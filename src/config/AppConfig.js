@@ -19,10 +19,11 @@ const AppConfig = {
     ENABLE_LOGGING: true,
     SHOW_SERVER_CONFIG: true, // Enable manual server config for debugging
 
-    // Android emulator loopback to host machine
-    // Use 10.0.2.2 to reach your PC's localhost from Android Studio emulator
-    DEV_SERVER_URL: 'http://10.0.2.2:10000',
-    DEV_AUTH_SERVER_URL: 'http://10.0.2.2:10000',
+    // Use localhost for both app and server in development.
+    // NOTE: On Android emulator, localhost refers to the emulator itself.
+    // Run: adb reverse tcp:10000 tcp:10000 so the emulator's localhost maps to your PC.
+    DEV_SERVER_URL: 'http://localhost:10000',
+    DEV_AUTH_SERVER_URL: 'http://localhost:10000',
 
     // Allow production fallback
     USE_PRODUCTION_FALLBACK: false,

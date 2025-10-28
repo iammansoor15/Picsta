@@ -2077,13 +2077,22 @@ React.useEffect(() => {
   // Listen for banner crop results via global manager (fallback if route callback is dropped)
   React.useEffect(() => {
     try {
-      const remove = cropResultManager.addListener((payload) => {
+      const remove = cropResultManager.addListener(async (payload) => {
         try {
           if (!payload) return;
           const { croppedUri, photoNumber } = payload;
           if (photoNumber === 'banner' && croppedUri) {
             setBannerUri(croppedUri);
             setBannerEnabled(true);
+            try {
+              await dispatch(uploadTemplate({
+                imageUri: croppedUri,
+                category: 'banners',
+                templateData: { name: 'Banner', ratio: '5:1' }
+              })).unwrap();
+            } catch (err) {
+              try { console.warn('Banner cloud upload failed:', err?.message || err); } catch {}
+            }
           }
         } catch (e) {
           // no-op
@@ -2097,6 +2106,9 @@ React.useEffect(() => {
   
   // Menu bar visibility
   const [menuVisible, setMenuVisible] = useState(false);
+
+  // Banner choice dialog
+  const [showBannerDialog, setShowBannerDialog] = useState(false);
 
   // Text color options
   const TEXT_COLORS = [
@@ -3812,6 +3824,69 @@ onHandlerStateChange={({ nativeEvent }) => {
               </View>
               )}
               
+              {/* Banner choice dialog */}
+              {showBannerDialog && (
+                <Modal
+                  animationType="fade"
+                  transparent
+                  visible={showBannerDialog}
+                  onRequestClose={() => setShowBannerDialog(false)}
+                >
+                  <TouchableWithoutFeedback onPress={() => setShowBannerDialog(false)}>
+                    <View style={styles.bannerDialogOverlay}>
+                      <TouchableWithoutFeedback>
+                        <View style={styles.bannerDialogContent}>
+                          <Text style={styles.bannerDialogTitle}>Banner</Text>
+                          <TouchableOpacity
+                            style={styles.bannerDialogButton}
+                            onPress={() => {
+                              try {
+                                setShowBannerDialog(false);
+navigation.navigate('BannerCreate', { ratio: '5:1' });
+                              } catch {}
+                            }}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.bannerDialogButtonText}>Create Banner</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.bannerDialogButton}
+                            onPress={async () => {
+                              try {
+                                setShowBannerDialog(false);
+                                const picked = await ImagePickerService.pickImageFromGallery();
+                                if (!picked || !picked.uri) return;
+                                navigation.navigate('BannerCrop', { uri: picked.uri, photoNumber: 'banner', ratio: '5:1' });
+                              } catch {}
+                            }}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.bannerDialogButtonText}>Add Banner</Text>
+                          </TouchableOpacity>
+
+                          {bannerEnabled && bannerUri ? (
+                            <TouchableOpacity
+                              style={[styles.bannerDialogButton, styles.bannerDialogButtonDanger]}
+                              onPress={() => {
+                                try {
+                                  setBannerUri(null);
+                                  setBannerEnabled(false);
+                                  setIsBannerFocused(false);
+                                  setShowBannerDialog(false);
+                                } catch {}
+                              }}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={styles.bannerDialogButtonText}>Remove Banner</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      </TouchableWithoutFeedback>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </Modal>
+              )}
+
               {/* Photo Container Clipping Area - moved inside imageContainerWrapper */}
               <View style={[
                 styles.photoContainerClipper,
@@ -4114,24 +4189,11 @@ onHandlerStateChange={({ nativeEvent }) => {
                   </TouchableOpacity>
 
                   {/* Banner button: pick image → crop (5:1) → set as top banner */}
-                  <TouchableOpacity
+                  <TouchableOpacity 
                     style={[styles.bannerButton, bannerEnabled && styles.bannerButtonActive]}
                     disabled={false}
-                    onPress={async () => {
-                      try {
-                        try { Alert.alert('Banner', 'Opening gallery...'); } catch (e) {}
-                        const picked = await ImagePickerService.pickImageFromGallery();
-                        if (!picked || !picked.uri) {
-                          return;
-                        }
-                        const pickedUri = picked.uri;
-                        // Navigate without function param; rely on cropResultManager listener
-                        navigation.navigate('BannerCrop', {
-                          uri: pickedUri,
-                          photoNumber: 'banner',
-                        });
-                      } catch (e) {
-                      }
+                    onPress={() => {
+                      try { setShowBannerDialog(true); } catch (e) {}
                     }}
                     activeOpacity={0.8}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -5309,6 +5371,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 16,
+  },
+
+  // Banner choice dialog styles
+  bannerDialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  bannerDialogContent: {
+    width: Math.min(320, screenWidth * 0.9),
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+  },
+  bannerDialogTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+    color: '#111',
+    textAlign: 'center',
+  },
+  bannerDialogButton: {
+    backgroundColor: COLORS.accent,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  bannerDialogButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  bannerDialogButtonDanger: {
+    backgroundColor: COLORS.error,
   },
   bannerText: {
     color: '#000000',

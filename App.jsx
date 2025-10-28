@@ -17,6 +17,7 @@ import HeroScreen from './src/screens/HeroScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import Crop from './src/Components/Crop';
 import BannerCrop from './src/Components/BannerCrop';
+import BannerCreate from './src/Components/BannerCreate';
 import ProfileEntry from './src/Components/ProfileEntry';
 import CustomHeader from './src/Components/CustomHeader';
 import NavigationService from './src/services/NavigationService';
@@ -158,6 +159,16 @@ export default function App() {
             <Stack.Screen 
               name="BannerCrop" 
               component={BannerCrop}
+              options={{
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
+
+            {/* Banner Create Screen */}
+            <Stack.Screen 
+              name="BannerCreate" 
+              component={BannerCreate}
               options={{
                 headerShown: false,
                 animation: 'slide_from_right',
