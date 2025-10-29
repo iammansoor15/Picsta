@@ -32,18 +32,18 @@ const BannerCreate = ({ route, navigation }) => {
   const [bgColor, setBgColor] = useState('#5B9BD5');
   const [isSaving, setIsSaving] = useState(false);
   const [activeField, setActiveField] = useState('companyName');
-  const [companyNameFont, setCompanyNameFont] = useState('System');
-  const [addressFont, setAddressFont] = useState('System');
-  const [nameFont, setNameFont] = useState('System');
-  const [phoneNumberFont, setPhoneNumberFont] = useState('System');
+  const [companyNameFont, setCompanyNameFont] = useState('BungeeShade-Regular');
+  const [addressFont, setAddressFont] = useState('LondrinaSolid-Regular');
+  const [nameFont, setNameFont] = useState('LondrinaSolid-Regular');
+  const [phoneNumberFont, setPhoneNumberFont] = useState('LondrinaSolid-Regular');
 
   const fonts = [
-    { name: 'System', value: 'System' },
-    { name: 'Bold', value: Platform.OS === 'ios' ? 'System' : 'sans-serif' },
-    { name: 'Serif', value: Platform.OS === 'ios' ? 'Georgia' : 'serif' },
-    { name: 'Monospace', value: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-    { name: 'Condensed', value: Platform.OS === 'ios' ? 'System' : 'sans-serif-condensed' },
-    { name: 'Light', value: Platform.OS === 'ios' ? 'System' : 'sans-serif-light' }
+    'BungeeShade-Regular',
+    'LondrinaSolid-Regular',
+    'LondrinaSketch-Regular',
+    'KumarOneOutline-Regular',
+    'MontserratAlternates-Regular',
+    'Pacifico-Regular'
   ];
 
   const getCurrentFont = () => {
@@ -96,19 +96,19 @@ const BannerCreate = ({ route, navigation }) => {
           <View style={[styles.bannerArea, { width: cropWidth, height: cropHeight, backgroundColor: bgColor }]}
                 collapsable={false}>
             {/* Company name - center */}
-            <Text style={[styles.companyNameText, { color: '#FFFFFF', fontFamily: companyNameFont }]} numberOfLines={1}>
+            <Text style={[styles.companyNameText, { color: '#FFFFFF', fontFamily: companyNameFont, fontWeight: 'normal' }]} numberOfLines={1}>
               {companyName}
             </Text>
             {/* Address - center below company */}
-            <Text style={[styles.addressText, { color: '#FFFFFF', fontFamily: addressFont }]} numberOfLines={1}>
+            <Text style={[styles.addressText, { color: '#FFFFFF', fontFamily: addressFont, fontWeight: 'normal' }]} numberOfLines={1}>
               {address}
             </Text>
             {/* Name and phone - top right */}
             <View style={styles.topRightInfo}>
-              <Text style={[styles.nameText, { color: '#FFFFFF', fontFamily: nameFont }]} numberOfLines={1}>
+              <Text style={[styles.nameText, { color: '#FFFFFF', fontFamily: nameFont, fontWeight: 'normal' }]} numberOfLines={1}>
                 {name}
               </Text>
-              <Text style={[styles.phoneText, { color: '#FFFFFF', fontFamily: phoneNumberFont }]} numberOfLines={1}>
+              <Text style={[styles.phoneText, { color: '#FFFFFF', fontFamily: phoneNumberFont, fontWeight: 'normal' }]} numberOfLines={1}>
                 {phoneNumber}
               </Text>
             </View>
@@ -153,12 +153,12 @@ const BannerCreate = ({ route, navigation }) => {
           <View style={styles.fontGrid}>
             {fonts.map((font) => (
               <TouchableOpacity
-                key={font.value}
-                style={[styles.fontButton, getCurrentFont() === font.value && styles.fontButtonActive]}
-                onPress={() => setCurrentFont(font.value)}
+                key={font}
+                style={[styles.fontButton, getCurrentFont() === font && styles.fontButtonActive]}
+                onPress={() => setCurrentFont(font)}
               >
-                <Text style={[styles.fontButtonText, { fontFamily: font.value }]} numberOfLines={1}>
-                  {font.name}
+                <Text style={[styles.fontButtonText, { fontFamily: font }]} numberOfLines={1}>
+                  {font.replace('-Regular', '').replace(/([A-Z])/g, ' $1').trim()}
                 </Text>
               </TouchableOpacity>
             ))}

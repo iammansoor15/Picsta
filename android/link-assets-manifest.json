@@ -1,0 +1,33 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "assets/fonts/BungeeShade-Regular.ttf",
+      "sha1": "9ec42efa59c7d9982095f0e0628ba37053871cb5"
+    },
+    {
+      "path": "assets/fonts/FONT_INSTALL_GUIDE.md",
+      "sha1": "d4ebc293f765400b061cf1d90b145a5ca5784142"
+    },
+    {
+      "path": "assets/fonts/KumarOneOutline-Regular.ttf",
+      "sha1": "5024fbf9e44b0a21b63bb12001fc28a2ef4d021f"
+    },
+    {
+      "path": "assets/fonts/LondrinaSketch-Regular.ttf",
+      "sha1": "00e46e2304f75584ba00d1b509c4785b29c0cbfa"
+    },
+    {
+      "path": "assets/fonts/LondrinaSolid-Regular.ttf",
+      "sha1": "e3931d4f2e0a4a872696311dce0f2fd09345552c"
+    },
+    {
+      "path": "assets/fonts/MontserratAlternates-Regular.ttf",
+      "sha1": "582b5038876ebafbb5204506c1e8eb3030f4fd7a"
+    },
+    {
+      "path": "assets/fonts/Pacifico-Regular.ttf",
+      "sha1": "3d0b9eb17e645ac34f83c49c3f988372b242173a"
+    }
+  ]
+}
