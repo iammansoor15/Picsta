@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Dimensions, TextInput, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Dimensions, TextInput, ActivityIndicator, Platform } from 'react-native';
 import ViewShot from 'react-native-view-shot';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
 import { cropResultManager } from '../utils/CropResultManager';
@@ -31,6 +31,39 @@ const BannerCreate = ({ route, navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState('8247714545');
   const [bgColor, setBgColor] = useState('#5B9BD5');
   const [isSaving, setIsSaving] = useState(false);
+  const [activeField, setActiveField] = useState('companyName');
+  const [companyNameFont, setCompanyNameFont] = useState('System');
+  const [addressFont, setAddressFont] = useState('System');
+  const [nameFont, setNameFont] = useState('System');
+  const [phoneNumberFont, setPhoneNumberFont] = useState('System');
+
+  const fonts = [
+    { name: 'System', value: 'System' },
+    { name: 'Bold', value: Platform.OS === 'ios' ? 'System' : 'sans-serif' },
+    { name: 'Serif', value: Platform.OS === 'ios' ? 'Georgia' : 'serif' },
+    { name: 'Monospace', value: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+    { name: 'Condensed', value: Platform.OS === 'ios' ? 'System' : 'sans-serif-condensed' },
+    { name: 'Light', value: Platform.OS === 'ios' ? 'System' : 'sans-serif-light' }
+  ];
+
+  const getCurrentFont = () => {
+    switch (activeField) {
+      case 'companyName': return companyNameFont;
+      case 'address': return addressFont;
+      case 'name': return nameFont;
+      case 'phoneNumber': return phoneNumberFont;
+      default: return 'Londrina';
+    }
+  };
+
+  const setCurrentFont = (font) => {
+    switch (activeField) {
+      case 'companyName': setCompanyNameFont(font); break;
+      case 'address': setAddressFont(font); break;
+      case 'name': setNameFont(font); break;
+      case 'phoneNumber': setPhoneNumberFont(font); break;
+    }
+  };
 
   const saveBanner = async () => {
     try {
@@ -63,19 +96,19 @@ const BannerCreate = ({ route, navigation }) => {
           <View style={[styles.bannerArea, { width: cropWidth, height: cropHeight, backgroundColor: bgColor }]}
                 collapsable={false}>
             {/* Company name - center */}
-            <Text style={[styles.companyNameText, { color: '#FFFFFF' }]} numberOfLines={1}>
+            <Text style={[styles.companyNameText, { color: '#FFFFFF', fontFamily: companyNameFont }]} numberOfLines={1}>
               {companyName}
             </Text>
             {/* Address - center below company */}
-            <Text style={[styles.addressText, { color: '#FFFFFF' }]} numberOfLines={1}>
+            <Text style={[styles.addressText, { color: '#FFFFFF', fontFamily: addressFont }]} numberOfLines={1}>
               {address}
             </Text>
             {/* Name and phone - top right */}
             <View style={styles.topRightInfo}>
-              <Text style={[styles.nameText, { color: '#FFFFFF' }]} numberOfLines={1}>
+              <Text style={[styles.nameText, { color: '#FFFFFF', fontFamily: nameFont }]} numberOfLines={1}>
                 {name}
               </Text>
-              <Text style={[styles.phoneText, { color: '#FFFFFF' }]} numberOfLines={1}>
+              <Text style={[styles.phoneText, { color: '#FFFFFF', fontFamily: phoneNumberFont }]} numberOfLines={1}>
                 {phoneNumber}
               </Text>
             </View>
@@ -86,32 +119,50 @@ const BannerCreate = ({ route, navigation }) => {
           <TextInput
             value={companyName}
             onChangeText={setCompanyName}
+            onFocus={() => setActiveField('companyName')}
             placeholder="Company Name"
             placeholderTextColor={COLORS.textSecondary}
-            style={styles.input}
+            style={[styles.input, activeField === 'companyName' && styles.inputActive]}
           />
           <TextInput
             value={address}
             onChangeText={setAddress}
+            onFocus={() => setActiveField('address')}
             placeholder="Address"
             placeholderTextColor={COLORS.textSecondary}
-            style={styles.input}
+            style={[styles.input, activeField === 'address' && styles.inputActive]}
           />
           <TextInput
             value={name}
             onChangeText={setName}
+            onFocus={() => setActiveField('name')}
             placeholder="Your Name"
             placeholderTextColor={COLORS.textSecondary}
-            style={styles.input}
+            style={[styles.input, activeField === 'name' && styles.inputActive]}
           />
           <TextInput
             value={phoneNumber}
             onChangeText={setPhoneNumber}
+            onFocus={() => setActiveField('phoneNumber')}
             placeholder="Phone Number"
             placeholderTextColor={COLORS.textSecondary}
             keyboardType="phone-pad"
-            style={styles.input}
+            style={[styles.input, activeField === 'phoneNumber' && styles.inputActive]}
           />
+          <Text style={styles.colorLabel}>Font Style (for {activeField === 'companyName' ? 'Company Name' : activeField === 'address' ? 'Address' : activeField === 'name' ? 'Name' : 'Phone Number'})</Text>
+          <View style={styles.fontGrid}>
+            {fonts.map((font) => (
+              <TouchableOpacity
+                key={font.value}
+                style={[styles.fontButton, getCurrentFont() === font.value && styles.fontButtonActive]}
+                onPress={() => setCurrentFont(font.value)}
+              >
+                <Text style={[styles.fontButtonText, { fontFamily: font.value }]} numberOfLines={1}>
+                  {font.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           <Text style={styles.colorLabel}>Banner Background Color</Text>
           <View style={styles.row}>
             <TouchableOpacity style={[styles.colorSwatch, { backgroundColor: '#5B9BD5' }]} onPress={() => setBgColor('#5B9BD5')} />
@@ -148,7 +199,12 @@ const styles = StyleSheet.create({
   phoneText: { fontSize: 8, fontWeight: '600', textAlign: 'right', marginTop: 2 },
   controls: { marginTop: SPACING.lg },
   input: { backgroundColor: COLORS.white, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, color: COLORS.text, marginBottom: SPACING.md },
+  inputActive: { borderWidth: 2, borderColor: COLORS.accent },
   colorLabel: { ...TYPOGRAPHY.bodyMedium, color: COLORS.text, marginBottom: SPACING.sm, marginTop: SPACING.sm },
+  fontGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: SPACING.md },
+  fontButton: { backgroundColor: COLORS.white, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, marginBottom: 8, borderWidth: 2, borderColor: COLORS.lightGray },
+  fontButtonActive: { borderColor: COLORS.accent, backgroundColor: COLORS.accentLight || '#E8F4F8' },
+  fontButtonText: { fontSize: 12, color: COLORS.text },
   row: { flexDirection: 'row', marginBottom: SPACING.sm },
   colorSwatch: { width: 48, height: 48, borderRadius: 8, marginRight: 10, borderWidth: 2, borderColor: COLORS.lightGray },
   saveButton: { backgroundColor: COLORS.accent, paddingVertical: SPACING.md, paddingHorizontal: SPACING.lg, borderRadius: 8, marginTop: SPACING.lg },
