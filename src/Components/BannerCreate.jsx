@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Text, Dimensions, TextInput, Activi
 import ViewShot from 'react-native-view-shot';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
 import { cropResultManager } from '../utils/CropResultManager';
+import BannerStorageService from '../services/BannerStorageService';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -69,6 +70,10 @@ const BannerCreate = ({ route, navigation }) => {
     try {
       setIsSaving(true);
       const uri = await viewShotRef.current.capture({ format: 'png', quality: 1, result: 'tmpfile' });
+      
+      // Save banner to storage
+      await BannerStorageService.saveBanner(uri);
+      
       const cacheSuffix = `t=${Date.now()}`;
       const finalUri = uri.includes('?') ? `${uri}&${cacheSuffix}` : `${uri}?${cacheSuffix}`;
       try { cropResultManager.setCropResult(finalUri, 'banner'); } catch {}

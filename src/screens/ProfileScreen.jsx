@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
-  Alert,
   ScrollView,
   Dimensions,
   ActivityIndicator,
   Modal,
 } from 'react-native';
+import CustomAlert from '../Components/CustomAlert';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
@@ -23,6 +23,7 @@ import UserAssetsService from '../services/UserAssetsService';
 import NavigationService from '../services/NavigationService';
 import AuthService from '../services/AuthService';
 import ProfilePictureStorageService from '../services/ProfilePictureStorageService';
+import BackgroundRemovalService from '../services/BackgroundRemovalService';
 import { 
   selectProfileImage, 
   selectOriginalProfileImage, 
@@ -75,6 +76,9 @@ const ProfileScreen = () => {
   const [bannerEnabled, setBannerEnabled] = useState(false);
   const [bannerUri, setBannerUri] = useState(null);
   const [isBannerFocused, setIsBannerFocused] = useState(false);
+
+  // Custom alert state
+  const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', buttons: [] });
 
   // Template preference state
   const RELIGIONS = ['hindu', 'muslim', 'christian'];
@@ -288,7 +292,7 @@ const ProfileScreen = () => {
     // return unsubscribe;
   }, []); // Empty dependency array - only run on mount
 
-// Simplified: use cropped image directly as profile picture (no background removal)
+// Process profile image: send to BG removal service with timeout, use bg-removed as profile photo
   const processProfileImage = async (imageUri) => {
     if (!imageUri) {
       console.log('❌ No image URI provided for processing');
@@ -296,7 +300,7 @@ const ProfileScreen = () => {
     }
 
     try {
-      console.log('🎭 ProfileScreen: Using cropped image directly for profile picture:', imageUri);
+      console.log('🎭 ProfileScreen: Processing profile picture with background removal:', imageUri);
       // Normalize: strip any cache-busting query suffix and ensure file:// prefix
       const clean = (u) => {
         const noQuery = typeof u === 'string' ? u.split('?')[0] : u;
@@ -304,26 +308,138 @@ const ProfileScreen = () => {
       };
 
       setIsProcessingProfile(true);
-      setProcessingStatus('Saving image...');
-
       const normalizedUri = clean(imageUri);
+      
+      let profileImageToUse = normalizedUri; // Default to original
+      let bgRemovedUri = null;
+      let bgRemovalSuccess = false;
 
-      // Persist the cropped image into app storage for stability
-      const saved = await ProfilePictureStorageService.saveProfilePictures(normalizedUri, null);
-      const finalUri = saved?.original || normalizedUri;
+      try {
+        // Step 1: Send to background removal service with 1.5 minute timeout
+        setProcessingStatus('Removing background...');
+        console.log('🔄 Sending image to background removal service (timeout: 90 seconds)...');
+        
+        // Create a timeout promise (90 seconds = 1.5 minutes)
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Background removal timeout')), 90000);
+        });
+        
+        // Race between background removal and timeout
+        const bgRemovalPromise = BackgroundRemovalService.processBatch(
+          [{ uri: normalizedUri }],
+          (progress) => {
+            console.log('📊 Background removal progress:', progress);
+          },
+          (status) => {
+            setProcessingStatus(status);
+          }
+        );
+        
+        const bgRemovalResults = await Promise.race([bgRemovalPromise, timeoutPromise]);
+        
+        console.log('✅ Background removal complete:', bgRemovalResults);
 
-      // Update both profile slices: processed and original are the same (no bg removal)
-      dispatch(updateProfileImage({ processedUri: finalUri, originalUri: finalUri }));
-      await dispatch(updateAndPersistProfilePicture({ imageUri: finalUri, isProcessed: false }));
+        // Step 2: Get the processed (bg-removed) image URI
+        bgRemovedUri = bgRemovalResults?.[0]?.processedUri || bgRemovalResults?.[0]?.uri;
+        
+        if (bgRemovedUri) {
+          bgRemovalSuccess = true;
+          profileImageToUse = bgRemovedUri; // Use bg-removed image as profile photo
+          console.log('✅ Background removal successful! Using bg-removed image as profile photo');
+        } else {
+          console.warn('⚠️ Background removal returned no image, using original');
+        }
+      } catch (bgError) {
+        console.warn('⚠️ Background removal failed or timed out:', bgError.message);
+        console.log('📸 Falling back to original image as profile photo');
+        // profileImageToUse remains as normalizedUri (original)
+      }
+
+      // Step 3: Save both versions to local storage
+      setProcessingStatus('Saving images...');
+      console.log('💾 Saving original and bg-removed images...');
+      console.log('   Original URI:', normalizedUri);
+      console.log('   BG-removed URI:', bgRemovedUri || 'N/A');
+      console.log('   Profile photo will be:', bgRemovalSuccess ? 'BG-REMOVED' : 'ORIGINAL');
+
+      const saved = await ProfilePictureStorageService.saveProfilePictures(
+        normalizedUri,  // original image (profile_image)
+        bgRemovedUri    // bg-removed image (bg_removed_profile_image) - can be null
+      );
+
+      console.log('✅ Images saved:', saved);
+
+      // Step 4: Update Redux store with the appropriate image
+      const finalOriginalUri = saved?.original || normalizedUri;
+      const finalBgRemovedUri = saved?.noBg || bgRemovedUri;
+      
+      // Use bg-removed as profile photo if successful, otherwise use original
+      const displayImageUri = bgRemovalSuccess && finalBgRemovedUri 
+        ? finalBgRemovedUri 
+        : finalOriginalUri;
+
+      dispatch(updateProfileImage({ 
+        processedUri: displayImageUri,  // Use bg-removed or original
+        originalUri: finalOriginalUri 
+      }));
+      await dispatch(updateAndPersistProfilePicture({ 
+        imageUri: displayImageUri, 
+        isProcessed: bgRemovalSuccess 
+      }));
 
       // Verify and notify
       testProfilePictureState();
-      Alert.alert('Profile Picture Updated', 'Your profile picture has been updated successfully!', [{ text: 'OK' }]);
-      console.log('✅ Profile image updated with cropped image only');
+      
+      const successMessage = bgRemovalSuccess
+        ? 'Your profile picture has been updated with background removed!'
+        : 'Your profile picture has been updated! (Background removal timed out, using original image)';
+      
+      setAlertConfig({
+        visible: true,
+        title: 'Profile Picture Updated',
+        message: successMessage,
+        buttons: [{ text: 'OK' }]
+      });
+      
+      console.log('✅ Profile image update complete');
+      console.log('   Display image:', displayImageUri);
+      console.log('   Original image:', finalOriginalUri);
+      console.log('   BG-removed image:', finalBgRemovedUri || 'N/A');
+      console.log('   Using:', bgRemovalSuccess ? 'BG-REMOVED' : 'ORIGINAL');
     } catch (error) {
-      console.error('❌ ProfileScreen: Error updating profile image:', error);
-      Alert.alert('Error', 'Failed to update profile picture. Please try again.');
-      throw error;
+      console.error('❌ ProfileScreen: Error processing profile image:', error);
+      
+      // On complete failure, try to at least save the original image
+      try {
+        console.log('🔄 Attempting to save original image as fallback...');
+        const normalizedUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
+        const saved = await ProfilePictureStorageService.saveProfilePictures(normalizedUri, null);
+        const finalUri = saved?.original || normalizedUri;
+        
+        dispatch(updateProfileImage({ 
+          processedUri: finalUri,
+          originalUri: finalUri 
+        }));
+        await dispatch(updateAndPersistProfilePicture({ 
+          imageUri: finalUri, 
+          isProcessed: false 
+        }));
+        
+        setAlertConfig({
+          visible: true,
+          title: 'Profile Picture Updated',
+          message: 'Your profile picture has been saved (background removal unavailable).',
+          buttons: [{ text: 'OK' }]
+        });
+      } catch (fallbackError) {
+        console.error('❌ Fallback save also failed:', fallbackError);
+        setAlertConfig({
+          visible: true,
+          title: 'Error',
+          message: `Failed to save profile picture: ${error.message}. Please try again.`,
+          buttons: [{ text: 'OK' }]
+        });
+      }
     } finally {
       setIsProcessingProfile(false);
       setProcessingStatus('');
@@ -496,13 +612,28 @@ const ProfileScreen = () => {
       const result = await clearAllProfileData(dispatch);
       
       if (result.success) {
-        Alert.alert('Success', 'Profile picture has been removed!');
+        setAlertConfig({
+          visible: true,
+          title: 'Success',
+          message: 'Profile picture has been removed!',
+          buttons: [{ text: 'OK' }]
+        });
       } else {
-        Alert.alert('Error', result.message || 'Failed to remove profile picture');
+        setAlertConfig({
+          visible: true,
+          title: 'Error',
+          message: result.message || 'Failed to remove profile picture',
+          buttons: [{ text: 'OK' }]
+        });
       }
     } catch (error) {
       console.error('❌ Error removing profile picture:', error);
-      Alert.alert('Error', 'Failed to remove profile picture');
+      setAlertConfig({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to remove profile picture',
+        buttons: [{ text: 'OK' }]
+      });
     }
   };
 
@@ -513,6 +644,9 @@ const ProfileScreen = () => {
       
       // First, clear the existing profile picture (comprehensive)
       await clearAllProfileData(dispatch);
+      
+      // Reset the forcedClear flag to allow new uploads
+      dispatch({ type: 'profilePicture/setForcedClear', payload: false });
       
       // Then open gallery to select new picture
       console.log('📷 ProfileScreen: Starting image picker for update...');
@@ -543,7 +677,12 @@ const ProfileScreen = () => {
           errorMessage = 'The request timed out. Please try again.';
         }
         
-        Alert.alert('Error', errorMessage);
+        setAlertConfig({
+          visible: true,
+          title: 'Error',
+          message: errorMessage,
+          buttons: [{ text: 'OK' }]
+        });
         return;
       }
       
@@ -557,7 +696,7 @@ const ProfileScreen = () => {
           return;
         }
         
-navigation.navigate('Crop', {
+        navigation.navigate('Crop', {
           uri: result.uri,
           image: result.uri,
           sourceUri: result.uri,
@@ -579,15 +718,21 @@ navigation.navigate('Crop', {
       }
     } catch (error) {
       console.error('❌ ProfileScreen: Error updating profile picture:', error);
-      Alert.alert('Error', 'Failed to update profile picture. Please try again.');
+      setAlertConfig({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to update profile picture. Please try again.',
+        buttons: [{ text: 'OK' }]
+      });
     }
   };
 
   const handleClearProfilePictures = () => {
-    Alert.alert(
-      'Clear Profile Pictures',
-      'This will remove all profile pictures and reset to default black circle. Are you sure?',
-      [
+    setAlertConfig({
+      visible: true,
+      title: 'Clear Profile Pictures',
+      message: 'This will remove all profile pictures and reset to default black circle. Are you sure?',
+      buttons: [
         {
           text: 'Cancel',
           style: 'cancel',
@@ -601,25 +746,41 @@ navigation.navigate('Crop', {
               const result = await clearAllProfilePictures(dispatch);
               
               if (result.success) {
-                Alert.alert('Success', 'All profile pictures have been cleared!');
+                setAlertConfig({
+                  visible: true,
+                  title: 'Success',
+                  message: 'All profile pictures have been cleared!',
+                  buttons: [{ text: 'OK' }]
+                });
               } else {
-                Alert.alert('Error', result.message || 'Failed to clear profile pictures');
+                setAlertConfig({
+                  visible: true,
+                  title: 'Error',
+                  message: result.message || 'Failed to clear profile pictures',
+                  buttons: [{ text: 'OK' }]
+                });
               }
             } catch (error) {
               console.error('❌ Error clearing profile pictures:', error);
-              Alert.alert('Error', 'Failed to clear profile pictures');
+              setAlertConfig({
+                visible: true,
+                title: 'Error',
+                message: 'Failed to clear profile pictures',
+                buttons: [{ text: 'OK' }]
+              });
             }
           },
         },
       ]
-    );
+    });
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
+    setAlertConfig({
+      visible: true,
+      title: 'Logout',
+      message: 'Are you sure you want to logout?',
+      buttons: [
         {
           text: 'Cancel',
           style: 'cancel',
@@ -660,14 +821,14 @@ navigation.navigate('Crop', {
           },
         },
       ]
-    );
+    });
   };
 
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Banner Section */}
-        {bannerEnabled && bannerUri ? (
+        {bannerEnabled && bannerUri && (
           <View style={styles.bannerContainer}>
             {isBannerUploading && (
               <View style={styles.bannerUploadingOverlay}>
@@ -702,14 +863,6 @@ navigation.navigate('Crop', {
               onError={() => {}}
             />
           </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.bannerAddButton}
-            onPress={openGalleryForBanner}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.bannerAddButtonText}>Add Banner</Text>
-          </TouchableOpacity>
         )}
 
         {/* Profile Picture Section */}
@@ -779,26 +932,21 @@ navigation.navigate('Crop', {
           {/* Religion Multi-Select */}
           <Text style={[styles.prefLabel, { marginBottom: 6 }]}>Select Religion(s)</Text>
           <View style={[styles.inputContainer, { paddingVertical: 8 }]}>            
-            {RELIGION_OPTIONS.map((key) => (
+            {RELIGIONS.map((key) => (
               <TouchableOpacity
                 key={key}
                 style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}
                 onPress={() => {
                   setSelectedReligions(prev => {
                     const set = new Set(prev.map(v => v.toLowerCase()));
-                    if (key === 'all') {
-                      const isAll = RELIGIONS.every(k => set.has(k));
-                      return isAll ? [] : [...RELIGIONS];
-                    }
                     if (set.has(key)) set.delete(key); else set.add(key);
                     return Array.from(set);
                   });
                 }}
               >
                 {(() => {
-                  const allSelected = RELIGIONS.every(k => selectedReligions.includes(k));
-                  const isSelected = key === 'all' ? allSelected : selectedReligions.includes(key);
-                  const label = key === 'all' ? 'All' : (key.charAt(0).toUpperCase() + key.slice(1));
+                  const isSelected = selectedReligions.includes(key);
+                  const label = key.charAt(0).toUpperCase() + key.slice(1);
                   return (
                     <>
                       <View style={[styles.checkboxBox, isSelected && styles.checkboxBoxSelected]} />
@@ -830,9 +978,19 @@ navigation.navigate('Crop', {
                 dispatch(setGlobalReligion(primary));
                 try { dispatch(saveMainSubToStorage()); } catch {}
 
-                Alert.alert('Saved', 'Preferences updated');
+                setAlertConfig({
+                  visible: true,
+                  title: 'Saved',
+                  message: 'Preferences updated',
+                  buttons: [{ text: 'OK' }]
+                });
               } catch (e) {
-                Alert.alert('Error', 'Failed to save preferences');
+                setAlertConfig({
+                  visible: true,
+                  title: 'Error',
+                  message: 'Failed to save preferences',
+                  buttons: [{ text: 'OK' }]
+                });
               }
             }}
             activeOpacity={0.8}
@@ -922,6 +1080,15 @@ navigation.navigate('Crop', {
           </View>
         </View>
       </Modal>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        onDismiss={() => setAlertConfig({ ...alertConfig, visible: false })}
+      />
     </View>
   );
 };
@@ -1065,7 +1232,7 @@ const styles = StyleSheet.create({
   updateButtonText: {
     ...TYPOGRAPHY.bodyLarge,
     fontWeight: '600',
-    color: COLORS.white,
+    color: '#FFFFFF',
   },
   clearButton: {
     backgroundColor: '#FF6B6B',
@@ -1153,7 +1320,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#ffffff',
     borderRadius: 20,
     margin: SPACING.lg,
     width: screenWidth - (SPACING.lg * 2),
@@ -1290,10 +1457,7 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.bodyLarge,
     fontSize: 16,
     fontWeight: '800',
-    color: '#1F2937', // Dark text for contrast on gradient
-    textShadowColor: 'rgba(255, 255, 255, 0.9)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   

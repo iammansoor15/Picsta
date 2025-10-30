@@ -7,6 +7,7 @@ import {
   Animated,
   TouchableOpacity,
   TextInput,
+  Keyboard,
 } from 'react-native';
 import Reanimated, {
   useSharedValue,
@@ -73,6 +74,12 @@ const DraggableText = ({
   const containerRef = useRef(null);
 
   const textInputRef = useRef(null);
+  
+  // Store original position before keyboard adjustment
+  const originalPositionRef = useRef({ x: 0, y: 0, saved: false });
+  
+  // Track if keyboard is currently visible for this component
+  const [isKeyboardShowing, setIsKeyboardShowing] = useState(false);
 
   // PanResponder for dragging with boundary constraints
   let startX = 0;
@@ -265,7 +272,7 @@ const DraggableText = ({
     }
   };
 
-  // Auto-focus text input when editing
+  // Auto-focus text input when editing and move to avoid keyboard
   useEffect(() => {
     if (isEditing && textInputRef.current) {
       setTimeout(() => {
@@ -273,6 +280,60 @@ const DraggableText = ({
       }, 100);
     }
   }, [isEditing]);
+  
+  // Save position when editing starts (before keyboard shows)
+  useEffect(() => {
+    if (isEditing && !originalPositionRef.current.saved) {
+      // Save current position as soon as editing starts
+      originalPositionRef.current = {
+        x: translateX.value,
+        y: translateY.value,
+        saved: true,
+      };
+      console.log('💾 Saved original position:', originalPositionRef.current);
+    }
+  }, [isEditing]);
+  
+  // Listen for keyboard show/hide to move position
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      setIsKeyboardShowing(true);
+      if (isEditing) {
+        // Move text container up to avoid keyboard (position already saved)
+        const keyboardHeight = 320;
+        const textHeight = containerDimensions.height || 40;
+        const safeZoneTop = containerHeight - keyboardHeight - textHeight - 50;
+        if (translateY.value > safeZoneTop) {
+          const targetY = Math.max(20, safeZoneTop);
+          console.log('⬆️ Moving text up from', translateY.value, 'to', targetY);
+          translateY.value = targetY;
+          if (onPositionChange) {
+            onPositionChange(textElement.id, translateX.value, targetY);
+          }
+        }
+      }
+    });
+    
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      setIsKeyboardShowing(false);
+      // Restore original position when keyboard closes
+      if (originalPositionRef.current.saved) {
+        console.log('⬇️ Restoring position to:', originalPositionRef.current);
+        translateX.value = originalPositionRef.current.x;
+        translateY.value = originalPositionRef.current.y;
+        if (onPositionChange) {
+          onPositionChange(textElement.id, originalPositionRef.current.x, originalPositionRef.current.y);
+        }
+        // Reset saved flag so next edit can save again
+        originalPositionRef.current.saved = false;
+      }
+    });
+    
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, [isEditing, containerHeight, containerDimensions.height, onPositionChange, textElement.id]);
 
   // Unfocus when another container is selected
   useEffect(() => {

@@ -449,14 +449,14 @@ export default AddTemplateModal;
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContainer: {
     width: screenWidth * 0.85,
     maxWidth: responsiveSize(400),
-    backgroundColor: COLORS.white,
+    backgroundColor: '#ffffff',
     borderRadius: SPACING.borderRadius * 2,
     padding: 0,
     elevation: 10,
@@ -470,16 +470,17 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.xxl,
     alignItems: 'center',
     position: 'relative',
+    backgroundColor: '#ffffff',
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: COLORS.primary,
     marginBottom: SPACING.sm,
     textAlign: 'center',
   },
   subtitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: '#000000',
     textAlign: 'center',
     marginBottom: SPACING.xl,
     lineHeight: 22,
@@ -494,13 +495,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     borderRadius: SPACING.borderRadius,
     marginBottom: SPACING.md,
-    backgroundColor: 'transparent',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: 'rgba(74, 144, 226, 0.3)', // Light primary color border
+    borderColor: '#e0e0e0',
   },
   categoryButtonText: {
     ...TYPOGRAPHY.bodyLarge,
-    color: COLORS.text, // Black text color
+    color: '#000000',
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -538,7 +539,8 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     borderRadius: SPACING.borderRadius,
     borderWidth: 1,
-    borderColor: 'rgba(74, 144, 226, 0.3)',
+    borderColor: '#e0e0e0',
+    backgroundColor: '#ffffff',
     alignItems: 'center',
   },
   ratioButtonSelected: {
@@ -547,7 +549,7 @@ const styles = StyleSheet.create({
   },
   ratioButtonText: {
     ...TYPOGRAPHY.bodyLarge,
-    color: COLORS.text,
+    color: '#000000',
     fontWeight: '600',
   },
   ratioButtonTextSelected: {
@@ -564,24 +566,26 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
     borderRadius: SPACING.borderRadius,
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: '#ff0000',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#ff0000',
   },
   ratioCancelText: {
     ...TYPOGRAPHY.bodyMedium,
-    color: COLORS.text,
+    color: '#ffffff',
     fontWeight: '600',
   },
   ratioConfirm: {
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
     borderRadius: SPACING.borderRadius,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   ratioConfirmText: {
     ...TYPOGRAPHY.bodyMedium,
-    color: COLORS.white,
+    color: '#000000',
     fontWeight: '700',
   },
   disabledText: {
@@ -589,7 +593,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
+    color: '#000000',
     textAlign: 'center',
     marginTop: SPACING.sm,
     fontStyle: 'italic',
@@ -613,7 +617,7 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     ...TYPOGRAPHY.bodyMedium,
-    color: COLORS.text,
+    color: '#000000',
     fontWeight: '600',
     marginBottom: SPACING.sm,
   },
@@ -621,12 +625,12 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: '#ffffff',
     borderRadius: SPACING.borderRadius,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#e0e0e0',
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: '#000000',
   },
   createButtonContainer: {
     width: '100%',

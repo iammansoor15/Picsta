@@ -16,14 +16,16 @@ import {
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
-  Alert,
   PermissionsAndroid,
   Platform,
   Modal,
   Share,
   FlatList,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
+import CustomAlert from '../Components/CustomAlert';
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -62,6 +64,7 @@ import { loadTemplatesByCategory } from '../store/slices/cloudinaryTemplateSlice
 import { selectReligion as selectGlobalReligion, selectSubcategory as selectGlobalSub, setSubcategory as setGlobalSub, setReligion as setGlobalReligion, loadMainSubFromStorage, saveMainSubToStorage } from '../store/slices/mainCategorySlice';
 import TemplateService from '../services/TemplateService';
 import AppConfig from '../config/AppConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -465,8 +468,11 @@ const HeroScreen = ({ route, navigation }) => {
   const [isReelsLoading, setIsReelsLoading] = useState(false);
   
 // Selected category for filtering templates
-const [selectedCategory, setSelectedCategory] = useState(null); // Start with null to allow proper initialization
+  const [selectedCategory, setSelectedCategory] = useState(null); // Start with null to allow proper initialization
   const [isHeroLoading, setIsHeroLoading] = useState(false);
+
+  // Custom alert state
+  const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', buttons: [] });
 
   // Global main/sub selections
   const globalReligion = useSelector(selectGlobalReligion);
@@ -538,7 +544,14 @@ const [selectedCategory, setSelectedCategory] = useState(null); // Start with nu
         // Optional: notify user once per selection when nothing found
         if (lastNotified.current.main !== m || lastNotified.current.sub !== s) {
           lastNotified.current = { main: m, sub: s };
-          try { Alert.alert('No template found', `No latest template found for ${m}/${s}.`); } catch {}
+          try {
+            setAlertConfig({
+              visible: true,
+              title: 'No template found',
+              message: `No latest template found for ${m}/${s}.`,
+              buttons: [{ text: 'OK' }]
+            });
+          } catch {}
         }
       }
       // 2) Refresh category grid/list for this subcategory
@@ -972,6 +985,26 @@ const [selectedCategory, setSelectedCategory] = useState(null); // Start with nu
   // Text rotation state - store rotation for each text element
   const [textRotations, setTextRotations] = useState({});
   
+  // Keyboard visibility state
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  
+  // Listen for keyboard events
+  React.useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+    
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+  
   // Force container to always use 9:16 aspect ratio
   React.useEffect(() => {
     try {
@@ -1034,11 +1067,8 @@ const [selectedCategory, setSelectedCategory] = useState(null); // Start with nu
 
   // Initialize single photo container with profile photo
   React.useEffect(() => {
-
-    // If user/crop has already set a custom image, do not overwrite it
-    if (photo1Uri && photo1Uri !== 'default_profile_image') {
-      return;
-    }
+    // Always update photo1 when profile picture changes in Redux
+    // This ensures the default photo container stays in sync with ProfileScreen changes
     
     // Set the single photo container to use the user's profile photo if available
     if (profilePictureUri) {
@@ -1053,7 +1083,7 @@ const [selectedCategory, setSelectedCategory] = useState(null); // Start with nu
     // Clear the second container (not needed anymore)
     dispatchPhotoState({ type: 'CLEAR_PHOTO_2' });
     
-  }, [profilePictureUri, profileImageProcessed, photo1Uri]); // Include photo1Uri to avoid overwriting user selection
+  }, [profilePictureUri, profileImageProcessed]); // React to profile picture changes only
 
   // Simple logging for photo size changes
   React.useEffect(() => {
@@ -2073,34 +2103,60 @@ React.useEffect(() => {
   const [bannerUri, setBannerUri] = useState(null);
   // Focus state for banner (controls showing ✕)
   const [isBannerFocused, setIsBannerFocused] = useState(false);
+  
+  // Debug: Log banner state changes
+  React.useEffect(() => {
+    console.log('\ud83c\udff7\ufe0f HeroScreen: Banner state changed:', {
+      bannerEnabled,
+      bannerUri: bannerUri ? bannerUri.substring(0, 80) + '...' : null,
+      uriLength: bannerUri?.length || 0,
+      isBannerFocused
+    });
+  }, [bannerEnabled, bannerUri, isBannerFocused]);
 
   // Listen for banner crop results via global manager (fallback if route callback is dropped)
   React.useEffect(() => {
     try {
       const remove = cropResultManager.addListener(async (payload) => {
         try {
-          if (!payload) return;
+          console.log('\ud83c\udfaf HeroScreen: Received cropResultManager event:', payload);
+          if (!payload) {
+            console.warn('\u26a0\ufe0f HeroScreen: Payload is empty');
+            return;
+          }
           const { croppedUri, photoNumber } = payload;
+          console.log('\ud83c\udfaf HeroScreen: Processing banner:', {
+            photoNumber,
+            croppedUri: croppedUri?.substring(0, 80) + '...',
+            uriLength: croppedUri?.length
+          });
+          
           if (photoNumber === 'banner' && croppedUri) {
+            console.log('\u2705 HeroScreen: Setting banner URI:', croppedUri);
             setBannerUri(croppedUri);
             setBannerEnabled(true);
+            console.log('\u2705 HeroScreen: Banner enabled and URI set');
+            
             try {
               await dispatch(uploadTemplate({
                 imageUri: croppedUri,
                 category: 'banners',
                 templateData: { name: 'Banner', ratio: '5:1' }
               })).unwrap();
+              console.log('\u2705 HeroScreen: Banner uploaded to cloud');
             } catch (err) {
-              try { console.warn('Banner cloud upload failed:', err?.message || err); } catch {}
+              console.warn('\u26a0\ufe0f Banner cloud upload failed:', err?.message || err);
             }
+          } else {
+            console.warn('\u26a0\ufe0f HeroScreen: Not a banner or missing URI:', { photoNumber, hasUri: !!croppedUri });
           }
         } catch (e) {
-          // no-op
+          console.error('\u274c HeroScreen: Error processing banner:', e);
         }
       });
       return () => { try { remove && remove(); } catch (e) {} };
     } catch (e) {
-      // no-op
+      console.error('\u274c HeroScreen: Error setting up banner listener:', e);
     }
   }, []);
   
@@ -2198,8 +2254,21 @@ React.useEffect(() => {
   };
 
   // Add a default first text container like the first photo container
-  const addDefaultTextElement = () => {
+  const addDefaultTextElement = async () => {
     if (defaultTextAddedRef.current) return;
+    
+    // Fetch user's name from AsyncStorage
+    let userName = 'Your Text'; // Default fallback
+    try {
+      const userJson = await AsyncStorage.getItem('AUTH_USER');
+      if (userJson) {
+        const user = JSON.parse(userJson);
+        userName = user?.name || 'Your Text';
+      }
+    } catch (e) {
+      console.warn('Failed to load user name for default text:', e);
+    }
+    
     const padding = 20;
     const estimatedTextWidth = 160;
     const estimatedTextHeight = 42;
@@ -2207,7 +2276,7 @@ React.useEffect(() => {
     const safeY = Math.max(padding, containerHeight - estimatedTextHeight - padding);
     const newTextElement = {
       id: `default-text-${Date.now()}`,
-      text: 'Your Text',
+      text: userName,
       x: safeX,
       y: safeY,
       width: estimatedTextWidth,
@@ -2231,6 +2300,34 @@ React.useEffect(() => {
     }
     // Only run when textElements emptiness changes or dimensions ready
   }, [textElements.length, containerWidth, containerHeight]);
+
+  // Update the default text element when returning from ProfileScreen
+  useFocusEffect(
+    React.useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          // Fetch user's name from AsyncStorage
+          const userJson = await AsyncStorage.getItem('AUTH_USER');
+          if (userJson && active) {
+            const user = JSON.parse(userJson);
+            const userName = user?.name || 'Your Text';
+            
+            // Update the default text element if it exists
+            if (textElements.length > 0) {
+              const defaultTextElement = textElements.find(el => el.id.startsWith('default-text-'));
+              if (defaultTextElement && defaultTextElement.text !== userName) {
+                updateTextContent(defaultTextElement.id, userName);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to update user name in text:', e);
+        }
+      })();
+      return () => { active = false; };
+    }, [textElements])
+  );
 
   const updateTextContent = (textId, newText) => {
     setTextElements(prev => 
@@ -3864,21 +3961,34 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                             <Text style={styles.bannerDialogButtonText}>Add Banner</Text>
                           </TouchableOpacity>
 
+                          <TouchableOpacity
+                            style={styles.bannerDialogButton}
+                            onPress={() => {
+                              try {
+                                setShowBannerDialog(false);
+                                navigation.navigate('UserBanners');
+                              } catch {}
+                            }}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.bannerDialogButtonText}>Use Your Banners</Text>
+                          </TouchableOpacity>
+
                           {bannerEnabled && bannerUri ? (
-                            <TouchableOpacity
-                              style={[styles.bannerDialogButton, styles.bannerDialogButtonDanger]}
-                              onPress={() => {
-                                try {
-                                  setBannerUri(null);
-                                  setBannerEnabled(false);
-                                  setIsBannerFocused(false);
-                                  setShowBannerDialog(false);
-                                } catch {}
-                              }}
-                              activeOpacity={0.85}
-                            >
-                              <Text style={styles.bannerDialogButtonText}>Remove Banner</Text>
-                            </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.bannerDialogButton, styles.bannerDialogButtonDanger]}
+                            onPress={() => {
+                              try {
+                                setBannerUri(null);
+                                setBannerEnabled(false);
+                                setIsBannerFocused(false);
+                                setShowBannerDialog(false);
+                              } catch {}
+                            }}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={[styles.bannerDialogButtonText, styles.bannerDialogButtonDangerText]}>Remove Banner</Text>
+                          </TouchableOpacity>
                           ) : null}
                         </View>
                       </TouchableWithoutFeedback>
@@ -4218,7 +4328,7 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     <View style={styles.menuIconCircle}>
                       <Text style={[styles.menuIconGlyph, styles.menuIconShrink, styles.menuIconText]}>📝</Text>
                     </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Add Text ({textElements.length})</Text>
+                    <Text style={styles.menuLabelText} numberOfLines={2}>Add Text</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
@@ -4299,6 +4409,7 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
       </View>
     )}
 
+    {!isKeyboardVisible && (
     <View pointerEvents="box-none" style={styles.fabOverlay}>
       {/* FAB row (category + upload) */}
       <View style={styles.fabRowContainer} pointerEvents="box-none">
@@ -4403,6 +4514,16 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
         />
       )}
     </View>
+    )}
+
+    {/* Custom Alert */}
+    <CustomAlert
+      visible={alertConfig.visible}
+      title={alertConfig.title}
+      message={alertConfig.message}
+      buttons={alertConfig.buttons}
+      onDismiss={() => setAlertConfig({ ...alertConfig, visible: false })}
+    />
     </>
   );
 };
@@ -4470,13 +4591,13 @@ const styles = StyleSheet.create({
   },
   menuBar: {
     height: MENU_BAR_HEIGHT,
-    backgroundColor: '#303030',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 8,
     paddingBottom: 8,
     marginTop: 8,
     marginBottom: 24,
     zIndex: 300,
-    elevation: 12,
+    elevation: 0,
     position: 'relative',
   },
   menuScrollView: {
@@ -4505,13 +4626,18 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    borderWidth: 2,
-    borderColor: '#e6e6e6',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#191b1a',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     overflow: 'hidden',
     marginBottom: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   menuIconShrink: {
     transform: [{ scale: 0.9 }],
@@ -4522,7 +4648,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false, // Android: remove extra top/bottom padding
   },
   menuLabelText: {
-    color: '#ffffff',
+    color: '#000000',
     fontWeight: 'bold',
     fontSize: 12.75,
     textAlign: 'center',
@@ -4535,14 +4661,13 @@ const styles = StyleSheet.create({
     fontSize: 31.2,
     marginBottom: 4,
     textAlign: 'center',
-    opacity: 0.5,
   },
   removeBgButtonDisabled: {
     backgroundColor: 'transparent',
     opacity: 0.5,
   },
   removeBgButtonTextDisabled: {
-    color: '#cccccc',
+    color: '#666666',
   },
   textButton: {
     flexDirection: 'column',
@@ -4633,7 +4758,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   withBgButtonTextDisabled: {
-    color: '#cccccc',
+    color: '#666666',
   },
   viewShotContainer: {
     width: IMAGE_CONTAINER_WIDTH,
@@ -5376,37 +5501,47 @@ const styles = StyleSheet.create({
   // Banner choice dialog styles
   bannerDialogOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 9999,
   },
   bannerDialogContent: {
     width: Math.min(320, screenWidth * 0.9),
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
   },
   bannerDialogTitle: {
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 10,
-    color: '#111',
+    color: '#000000',
     textAlign: 'center',
   },
   bannerDialogButton: {
-    backgroundColor: COLORS.accent,
+    backgroundColor: '#ffffff',
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
     marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   bannerDialogButtonText: {
-    color: '#fff',
+    color: '#000000',
     fontWeight: '700',
   },
   bannerDialogButtonDanger: {
-    backgroundColor: COLORS.error,
+    backgroundColor: '#ff0000',
+    borderColor: '#ff0000',
+  },
+  bannerDialogButtonDangerText: {
+    color: '#ffffff',
   },
   bannerText: {
     color: '#000000',

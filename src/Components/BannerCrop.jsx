@@ -71,6 +71,20 @@ try {
   };
 }
 
+// Import BannerStorageService
+let BannerStorageService;
+try {
+  BannerStorageService = require('../services/BannerStorageService').default;
+} catch (error) {
+  console.warn('BannerStorageService not available');
+  BannerStorageService = {
+    saveBanner: async (uri) => {
+      console.log('Fallback: Saving banner', uri);
+      return { uri };
+    }
+  };
+}
+
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const parseRatio = (r) => {
@@ -182,6 +196,13 @@ const BannerCrop = ({ route, navigation }) => {
       }
 
       const capturedUri = await viewShotRef.current.capture({ format: 'png', quality: 1, result: 'tmpfile' });
+
+      // Save banner to storage
+      try {
+        await BannerStorageService.saveBanner(capturedUri);
+      } catch (saveError) {
+        console.warn('Failed to save banner to storage:', saveError);
+      }
 
       // Cache-bust the URI so Image reloads even if file path is reused
       const cacheSuffix = `t=${Date.now()}`;
