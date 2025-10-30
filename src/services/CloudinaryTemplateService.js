@@ -368,9 +368,10 @@ class CloudinaryTemplateService {
         const normalized = {
           ...t,
           id,
-          // For videos, preserve video_url; for images, use image_url
+          // For videos, preserve both video_url AND image_url (as thumbnail/poster)
+          // For images, only set image_url
           video_url: isVideo ? (t.video_url || t.image_url) : null,
-          image_url: !isVideo ? (t.image_url || t.secure_url || t.url) : null,
+          image_url: t.image_url || t.secure_url || t.url || null,
           // Provide Cloudinary-like fields as fallbacks for existing UI
           secure_url: mediaUrl || t.secure_url || t.url || null,
           url: mediaUrl || t.url || null,

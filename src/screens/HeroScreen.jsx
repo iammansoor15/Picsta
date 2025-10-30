@@ -1268,11 +1268,40 @@ const HeroScreen = ({ route, navigation }) => {
   const applyDocToTemplate = React.useCallback((doc, fallbackSerial = null) => {
     if (!doc) return false;
     try {
-      const resolved = getTemplateUri(doc) || getTemplateUri({ image_url: doc?.image_url }) || doc?.image_url;
-      if (resolved) {
-        setTemplateImage({ uri: resolved });
-        setReelsTemplates([doc]);
+      // Check if this is a video template
+      const isVideo = doc?.resource_type === 'video' || !!doc?.video_url;
+      
+      // For videos, use video_url; for images, use image_url
+      const mediaUrl = isVideo ? (doc?.video_url || doc?.image_url) : doc?.image_url;
+      const resolved = getTemplateUri(doc) || getTemplateUri({ image_url: mediaUrl }) || mediaUrl;
+      
+      if (resolved || mediaUrl) {
+        // Create normalized template object with all video/image fields preserved
+        const normalizedDoc = {
+          ...doc,
+          image_url: doc?.image_url,
+          video_url: doc?.video_url,
+          resource_type: doc?.resource_type || (isVideo ? 'video' : 'image'),
+          secure_url: doc?.secure_url || resolved || mediaUrl,
+          url: doc?.url || resolved || mediaUrl
+        };
+        
+        // Set template image (for static display)
+        setTemplateImage({ uri: resolved || mediaUrl });
+        
+        // Pass normalized doc to reels templates array (preserves video_url)
+        setReelsTemplates([normalizedDoc]);
         setCurrentSerial(Number(doc?.serial_no || fallbackSerial || 1));
+        
+        console.log('✅ Applied template doc:', {
+          serial_no: doc?.serial_no,
+          isVideo,
+          hasVideoUrl: !!doc?.video_url,
+          hasImageUrl: !!doc?.image_url,
+          resource_type: normalizedDoc.resource_type,
+          videoUrl: doc?.video_url?.substring(0, 60),
+          imageUrl: doc?.image_url?.substring(0, 60)
+        });
 
         // Apply saved photo container axis from MongoDB, if present
         try {
@@ -1291,14 +1320,15 @@ const HeroScreen = ({ route, navigation }) => {
               if (pan1Y && typeof pan1Y.value !== 'undefined') pan1Y.value = clampedY;
             } catch (e) {
             }
-          } else {
           }
         } catch (e) {
         }
 
         return true;
       }
-    } catch {}
+    } catch (e) {
+      console.error('❌ Error in applyDocToTemplate:', e);
+    }
     return false;
   }, [getTemplateUri, setTemplateImage, setReelsTemplates, containerWidth, containerHeight, photo1Size, pan1X, pan1Y]);
 
@@ -1452,8 +1482,17 @@ React.useEffect(() => {
         // Update the current template from cache
         const currentIdx = currentSerial - 1;
         if (arr[currentIdx]) {
-          console.log('📦 Using cached template for serial:', currentSerial);
-          setTemplateImage({ uri: arr[currentIdx].image_url });
+          const cachedTemplate = arr[currentIdx];
+          const isVideo = cachedTemplate.resource_type === 'video' || !!cachedTemplate.video_url;
+          const displayUrl = isVideo ? (cachedTemplate.video_url || cachedTemplate.image_url) : cachedTemplate.image_url;
+          
+          console.log('📦 Using cached template for serial:', {
+            serial: currentSerial,
+            isVideo,
+            displayUrl: displayUrl?.substring(0, 60)
+          });
+          
+          setTemplateImage({ uri: displayUrl });
         }
         return;
       }
@@ -1608,8 +1647,17 @@ React.useEffect(() => {
       // Update current template from fetched/cached data
       const currentIdx = currentSerial - 1;
       if (arr[currentIdx]) {
-        console.log('📦 Setting template image for current serial:', currentSerial);
-        setTemplateImage({ uri: arr[currentIdx].image_url });
+        const currentTemplate = arr[currentIdx];
+        const isVideo = currentTemplate.resource_type === 'video' || !!currentTemplate.video_url;
+        const displayUrl = isVideo ? (currentTemplate.video_url || currentTemplate.image_url) : currentTemplate.image_url;
+        
+        console.log('📦 Setting template for current serial:', {
+          serial: currentSerial,
+          isVideo,
+          displayUrl: displayUrl?.substring(0, 60)
+        });
+        
+        setTemplateImage({ uri: displayUrl });
       }
       
       // Update reelsTemplates with available batch images for scrolling
@@ -3775,7 +3823,8 @@ onHandlerStateChange={({ nativeEvent }) => {
                                     style={{ width: '100%', height: '100%' }}
                                     resizeMode="cover"
                                     repeat={true}
-                                    muted={true}
+                                    muted={false}
+                                    volume={1.0}
                                     paused={false}
                                     controls={false}
                                     ignoreSilentSwitch="ignore"
@@ -3783,7 +3832,7 @@ onHandlerStateChange={({ nativeEvent }) => {
                                     playWhenInactive={false}
                                     posterResizeMode="cover"
                                     onLoad={(data) => {
-                                      console.log('✅ Video loaded successfully for scroll index:', index, 'serial:', item?.serial_no);
+                                      console.log('✅ Video loaded successfully with audio for scroll index:', index, 'serial:', item?.serial_no);
                                     }}
                                     onError={(error) => {
                                       console.error('❌ Video load error at index:', index, 'serial:', item?.serial_no, error);
