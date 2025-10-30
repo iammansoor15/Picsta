@@ -137,10 +137,12 @@ const ShapeDropdownFixed = ({ selectedShape, onShapeChange, style }) => {
         accessibilityHint="Tap to open shape selection menu"
         testID="shape-dropdown-button"
       >
-        <Text style={styles.dropdownButtonText}>
-          {selectedShapeData ? selectedShapeData.label : 'Select Shape'}
-        </Text>
-        <Text style={styles.dropdownArrow}>▼</Text>
+        <View style={styles.menuIconCircle}>
+          <Text style={styles.menuIconGlyph}>
+            {selectedShapeData ? selectedShapeData.icon : '⬜'}
+          </Text>
+        </View>
+        <Text style={styles.menuLabelText}>Shape</Text>
       </TouchableOpacity>
 
       <Modal
@@ -197,34 +199,49 @@ const styles = StyleSheet.create({
     zIndex: 3000,
   },
   dropdownButton: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 22,
-    borderWidth: 0,
-    borderColor: '#ffffff',
-    minWidth: 140,
-    minHeight: 44,
-    elevation: 3,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    overflow: 'visible',
     justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
+    marginHorizontal: 8,
+    minWidth: 85,
+    width: 85,
   },
-  dropdownButtonText: {
-    color: '#000000',
-    fontWeight: 'bold',
-    fontSize: 14,
-    flex: 1,
+  menuIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F7FA',
+    overflow: 'hidden',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  dropdownArrow: {
-    color: '#000000',
-    fontSize: 10,
-    marginLeft: 8,
+  menuIconGlyph: {
+    fontSize: 32,
+    marginBottom: 2,
+    textAlign: 'center',
+  },
+  menuLabelText: {
+    color: '#2C3E50',
+    fontWeight: '600',
+    fontSize: 13,
+    textAlign: 'center',
+    flexWrap: 'wrap',
+    lineHeight: 14,
+    minHeight: 28,
+    width: '100%',
+    letterSpacing: 0.2,
   },
   modalOverlay: {
     flex: 1,

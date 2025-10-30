@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
   headerTitle: { ...TYPOGRAPHY.bodyMedium, fontWeight: '700', color: COLORS.text },
   content: { flex: 1, alignItems: 'center', paddingVertical: SPACING.xl },
   title: { ...TYPOGRAPHY.bodyMedium, color: COLORS.text, marginBottom: SPACING.md },
-  bannerArea: { justifyContent: 'center', alignItems: 'center', borderRadius: 12, overflow: 'hidden', position: 'relative' },
+  bannerArea: { justifyContent: 'center', alignItems: 'center', borderRadius: 0, overflow: 'hidden', position: 'relative' },
   companyNameText: { fontSize: 20, fontWeight: '800', letterSpacing: 0.5, textAlign: 'center' },
   addressText: { fontSize: 9, fontWeight: '400', letterSpacing: 0.3, textAlign: 'center', marginTop: 1.4 },
   topRightInfo: { position: 'absolute', top: 8, right: 12 },
