@@ -417,6 +417,208 @@ const DynamicPhotoElement = ({
 };
 
 
+// Separate component for video template items to use hooks properly
+const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCurrentVideo }) => {
+  const [localUri, setLocalUri] = React.useState(null);
+  const [downloadProgress, setDownloadProgress] = React.useState(0);
+  const [isDownloading, setIsDownloading] = React.useState(false);
+  const [isReady, setIsReady] = React.useState(false);
+  const [isBuffering, setIsBuffering] = React.useState(true);
+  const [canPlay, setCanPlay] = React.useState(false);
+  const videoRef = React.useRef(null);
+  
+  const videoUrl = item?.video_url;
+  const imageUrl = item?.image_url || item?.url || item?.secure_url;
+  const isVideo = item?.resource_type === 'video' || 
+                  (videoUrl && (videoUrl.endsWith('.mp4') || videoUrl.endsWith('.mov') || 
+                   videoUrl.endsWith('.avi') || videoUrl.includes('/video/upload/')));
+  
+  // Download video to local storage on mount (for videos only)
+  React.useEffect(() => {
+    if (!isVideo || !videoUrl) return;
+    
+    const downloadVideo = async () => {
+      try {
+        setIsDownloading(true);
+        const RNFS = require('react-native-fs');
+        
+        // Create cache filename based on video URL
+        const filename = `video_cache_${item?.serial_no || index}_${Date.now()}.mp4`;
+        const downloadPath = `${RNFS.CachesDirectoryPath}/${filename}`;
+        
+        // Check if already downloaded
+        const exists = await RNFS.exists(downloadPath);
+        if (exists) {
+          console.log('✅ Video already cached at index:', index);
+          const localFileUri = Platform.OS === 'android' ? `file://${downloadPath}` : downloadPath;
+          console.log('📁 Using cached file URI:', localFileUri);
+          setLocalUri(localFileUri);
+          setIsReady(true);
+          setIsDownloading(false);
+          return;
+        }
+        
+        console.log('📥 Downloading video at index:', index, 'from:', videoUrl.substring(0, 60));
+        
+        // Download with progress tracking
+        const download = RNFS.downloadFile({
+          fromUrl: videoUrl,
+          toFile: downloadPath,
+          progressDivider: 10,
+          begin: (res) => {
+            console.log('🔄 Download started, size:', res.contentLength);
+          },
+          progress: (res) => {
+            const progress = res.bytesWritten / res.contentLength;
+            setDownloadProgress(progress);
+            if (progress % 0.2 < 0.1) { // Log every 20%
+              console.log('📊 Download progress at index:', index, `${(progress * 100).toFixed(0)}%`);
+            }
+          },
+        });
+        
+        const result = await download.promise;
+        
+        if (result.statusCode === 200) {
+          console.log('✅ Video downloaded successfully at index:', index);
+          // Use file:// protocol for local files
+          const localFileUri = Platform.OS === 'android' ? `file://${downloadPath}` : downloadPath;
+          console.log('📁 Local file URI:', localFileUri);
+          setLocalUri(localFileUri);
+          setIsReady(true);
+        } else {
+          console.error('❌ Download failed with status:', result.statusCode);
+          // Fallback to streaming
+          setLocalUri(videoUrl);
+          setIsReady(true);
+        }
+        
+        setIsDownloading(false);
+      } catch (error) {
+        console.error('❌ Video download error at index:', index, error);
+        // Fallback to streaming
+        setLocalUri(videoUrl);
+        setIsReady(true);
+        setIsDownloading(false);
+      }
+    };
+    
+    downloadVideo();
+  }, [isVideo, videoUrl, index]);
+  
+  // When video becomes current and is ready, seek to start
+  React.useEffect(() => {
+    if (isCurrentVideo && isReady && videoRef.current) {
+      videoRef.current.seek(0);
+      console.log('🔄 Restarting video at index:', index);
+    }
+  }, [isCurrentVideo, isReady]);
+  
+  // For images, mark as ready immediately; for videos, allow initial play
+  React.useEffect(() => {
+    if (!isVideo) {
+      setIsReady(true);
+    } else if (localUri) {
+      // Allow video to start playing once URI is available
+      setCanPlay(true);
+      setIsBuffering(false);
+    }
+  }, [isVideo, localUri]);
+  
+  // Show loading spinner while downloading only
+  const showLoading = isVideo && isDownloading;
+  
+  return (
+    <View style={{ width: containerWidth, height: containerHeight }}>
+      {isVideo ? (
+        <>
+          {localUri ? (
+            <Video
+              ref={videoRef}
+              source={{ uri: localUri }}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="cover"
+              repeat={true}
+              muted={!isCurrentVideo}
+              volume={isCurrentVideo ? 1.0 : 0}
+              paused={!isCurrentVideo}
+              controls={false}
+              ignoreSilentSwitch="ignore"
+              posterResizeMode="cover"
+              poster={imageUrl}
+              bufferConfig={{
+                minBufferMs: 15000,
+                maxBufferMs: 50000,
+                bufferForPlaybackMs: 2500,
+                bufferForPlaybackAfterRebufferMs: 5000
+              }}
+              maxBitRate={2000000}
+              progressUpdateInterval={250}
+              onLoad={(data) => {
+                console.log('✅ Video loaded from local cache at index:', index, 'duration:', data.duration);
+                setIsReady(true);
+              }}
+              onBuffer={({ isBuffering }) => {
+                setIsBuffering(isBuffering);
+                if (isBuffering) {
+                  console.log('📊 Video buffering at index:', index);
+                  setCanPlay(false);
+                } else {
+                  console.log('✅ Video buffered and ready at index:', index);
+                  setCanPlay(true);
+                }
+              }}
+              onReadyForDisplay={() => {
+                console.log('✅ Video ready for display at index:', index);
+                setIsReady(true);
+                setCanPlay(true);
+              }}
+              onError={(error) => {
+                console.error('❌ Video playback error at index:', index, error);
+              }}
+            />
+          ) : null}
+          
+          {/* Loading spinner overlay - shows while downloading */}
+          {showLoading && (
+            <View style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+              <ActivityIndicator size="large" color="#ffffff" />
+              <Text style={{ color: '#fff', marginTop: 10, fontSize: 14 }}>
+                {isDownloading 
+                  ? `Downloading ${(downloadProgress * 100).toFixed(0)}%` 
+                  : isBuffering 
+                  ? 'Buffering video...' 
+                  : 'Loading...'}
+              </Text>
+            </View>
+          )}
+        </>
+      ) : (
+        <Image
+          source={{ uri: imageUrl }}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+          onLoad={() => {
+            console.log('✅ Image loaded successfully for scroll index:', index, 'serial:', item?.serial_no);
+          }}
+          onError={(e) => {
+            console.error('❌ Image load error at index:', index, 'serial:', item?.serial_no, e?.nativeEvent?.error);
+          }}
+        />
+      )}
+    </View>
+  );
+};
+
 const HeroScreen = ({ route, navigation }) => {
   // Hide React Navigation header for this screen
   useLayoutEffect(() => {
@@ -2646,7 +2848,6 @@ React.useEffect(() => {
       setIsSaving(true);
       setError(null);
 
-
       // Request permission
       const hasPermission = await requestStoragePermission();
       if (!hasPermission) {
@@ -2663,13 +2864,76 @@ React.useEffect(() => {
         return;
       }
       
-
+      // Check if current template is a video
+      const currentTemplate = reelsTemplates && reelsTemplates.length > 0 ? reelsTemplates[currentReelIndex] : null;
+      const isVideo = currentTemplate?.resource_type === 'video' || !!currentTemplate?.video_url;
+      const videoUrl = currentTemplate?.video_url;
+      
+      console.log('💾 Save triggered:', {
+        isVideo,
+        hasVideoUrl: !!videoUrl,
+        videoUrl: videoUrl?.substring(0, 60),
+        currentReelIndex,
+        templateSerial: currentTemplate?.serial_no
+      });
+      
+      // If it's a video, download and save  the template video
+      if (isVideo && videoUrl) {
+        try {
+          console.log('🎥 Downloading video template...');
+          
+          const RNFS = require('react-native-fs');
+          const timestamp = Date.now();
+          const filename = `narayana_video_${timestamp}.mp4`;
+          const downloadPath = `${RNFS.CachesDirectoryPath}/${filename}`;
+          
+          // Download video
+          const downloadResult = await RNFS.downloadFile({
+            fromUrl: videoUrl,
+            toFile: downloadPath,
+          }).promise;
+          
+          if (downloadResult.statusCode !== 200) {
+            throw new Error(`Download failed: ${downloadResult.statusCode}`);
+          }
+          
+          console.log('✅ Video downloaded:', downloadPath);
+          
+          // Save to gallery
+          const savedUri = await CameraRoll.save(downloadPath, {
+            type: 'video',
+            album: 'Narayana Templates'
+          });
+          
+          console.log('✅ Video saved to gallery:', savedUri);
+          
+          try { setSavedTemplateUri(savedUri); } catch (e) {}
+          
+          Alert.alert(
+            'Success! 🎥', 
+            `Your video template has been saved!\n\nYou can find it in your Photos/Gallery app under the 'Narayana Templates' album.`,
+            [{ text: 'Great!', style: 'default' }]
+          );
+          
+          // Clean up temp file
+          try {
+            await RNFS.unlink(downloadPath);
+          } catch (e) {}
+          
+          return savedUri;
+          
+        } catch (videoError) {
+          console.error('❌ Video save failed:', videoError);
+          throw new Error(`Failed to save video: ${videoError.message}`);
+        }
+      }
+      
+      // For images, use ViewShot capture (existing logic)
       if (!viewShotRef.current) {
         Alert.alert('Error', 'Unable to capture template. Please try again.');
         return;
       }
 
-      
       // Unfocus any active containers (simulate background tap) so borders/handles are hidden
       try { handleBackgroundPress(); setShowTextCustomization(false); } catch (e) {}
 
@@ -2680,7 +2944,6 @@ React.useEffect(() => {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Capture the entire template
-      
       const uri = await viewShotRef.current.capture({ 
         format: 'jpg', 
         quality: 1.0,
@@ -2750,17 +3013,81 @@ React.useEffect(() => {
   const shareTemplate = async () => {
     try {
       setError(null);
-
-      // Always follow: capture -> save to storage (gallery) -> share
-      if (!viewShotRef.current) {
-        Alert.alert('Error', 'Unable to capture template. Please try again.');
-        return null;
-      }
-
+      
+      // Check if current template is a video
+      const currentTemplate = reelsTemplates && reelsTemplates.length > 0 ? reelsTemplates[currentReelIndex] : null;
+      const isVideo = currentTemplate?.resource_type === 'video' || !!currentTemplate?.video_url;
+      const videoUrl = currentTemplate?.video_url;
+      
+      console.log('🔗 Share triggered:', {
+        isVideo,
+        hasVideoUrl: !!videoUrl,
+        videoUrl: videoUrl?.substring(0, 60),
+        currentReelIndex,
+        templateSerial: currentTemplate?.serial_no
+      });
+      
       // Request storage permissions (Android)
       const hasPermission = await requestStoragePermission();
       if (!hasPermission) {
-        Alert.alert('Permission Required', 'Storage permission is required to save and share the image.');
+        Alert.alert('Permission Required', 'Storage permission is required to save and share the template.');
+        return null;
+      }
+      
+      // If it's a video, download and share the template video
+      if (isVideo && videoUrl) {
+        try {
+          console.log('🎥 Downloading video for sharing...');
+          
+          const RNFS = require('react-native-fs');
+          const timestamp = Date.now();
+          const filename = `narayana_video_${timestamp}.mp4`;
+          const downloadPath = `${RNFS.CachesDirectoryPath}/${filename}`;
+          
+          // Download video
+          const downloadResult = await RNFS.downloadFile({
+            fromUrl: videoUrl,
+            toFile: downloadPath,
+          }).promise;
+          
+          if (downloadResult.statusCode !== 200) {
+            throw new Error(`Download failed: ${downloadResult.statusCode}`);
+          }
+          
+          console.log('✅ Video downloaded for sharing:', downloadPath);
+          
+          // Share the video
+          const fileUrl = downloadPath.startsWith('file://') ? downloadPath : `file://${downloadPath}`;
+          await RNShare.open({
+            url: fileUrl,
+            type: 'video/mp4',
+            filename: filename,
+            failOnCancel: false,
+            showAppsToView: true,
+            title: 'Share Video Template'
+          });
+          
+          console.log('✅ Video share dialog opened');
+          
+          // Clean up temp file after sharing
+          setTimeout(async () => {
+            try {
+              await RNFS.unlink(downloadPath);
+              console.log('✅ Cleaned up temp video');
+            } catch (e) {}
+          }, 5000);
+          
+          return fileUrl;
+          
+        } catch (videoError) {
+          console.error('❌ Video share failed:', videoError);
+          throw new Error(`Failed to share video: ${videoError.message}`);
+        }
+      }
+
+      // For images, use ViewShot capture (existing logic)
+      if (!viewShotRef.current) {
+        Alert.alert('Error', 'Unable to capture template. Please try again.');
         return null;
       }
 
@@ -3789,71 +4116,15 @@ onHandlerStateChange={({ nativeEvent }) => {
                           ref={reelsListRef}
                           data={reelsTemplates}
                           keyExtractor={(item, index) => item?.id || item?._id || `template-${index}`}
-                          renderItem={({ item, index }) => {
-                            console.log('🎬 Rendering template item:', {
-                              index,
-                              serial_no: item?.serial_no,
-                              has_video_url: !!item?.video_url,
-                              has_image_url: !!item?.image_url,
-                              resource_type: item?.resource_type
-                            });
-                            
-                            // Determine if this is a video
-                            const videoUrl = item?.video_url;
-                            const imageUrl = item?.image_url || item?.url || item?.secure_url;
-                            const isVideo = item?.resource_type === 'video' || 
-                                          (videoUrl && (videoUrl.endsWith('.mp4') || videoUrl.endsWith('.mov') || 
-                                           videoUrl.endsWith('.avi') || videoUrl.includes('/video/upload/')));
-                            
-                            const displayUrl = isVideo ? (videoUrl || imageUrl) : imageUrl;
-                            
-                            console.log('🎬 Template display decision:', {
-                              index,
-                              serial_no: item?.serial_no,
-                              isVideo,
-                              displayUrl: displayUrl?.substring(0, 80) + '...',
-                              willRenderAs: isVideo ? 'VIDEO' : 'IMAGE'
-                            });
-                            
-                            return (
-                              <View style={{ width: containerWidth, height: containerHeight }}>
-                                {isVideo ? (
-                                  <Video
-                                    source={{ uri: displayUrl }}
-                                    style={{ width: '100%', height: '100%' }}
-                                    resizeMode="cover"
-                                    repeat={true}
-                                    muted={false}
-                                    volume={1.0}
-                                    paused={false}
-                                    controls={false}
-                                    ignoreSilentSwitch="ignore"
-                                    playInBackground={false}
-                                    playWhenInactive={false}
-                                    posterResizeMode="cover"
-                                    onLoad={(data) => {
-                                      console.log('✅ Video loaded successfully with audio for scroll index:', index, 'serial:', item?.serial_no);
-                                    }}
-                                    onError={(error) => {
-                                      console.error('❌ Video load error at index:', index, 'serial:', item?.serial_no, error);
-                                    }}
-                                  />
-                                ) : (
-                                  <Image
-                                    source={{ uri: displayUrl }}
-                                    style={{ width: '100%', height: '100%' }}
-                                    resizeMode="cover"
-                                    onLoad={() => {
-                                      console.log('✅ Image loaded successfully for scroll index:', index, 'serial:', item?.serial_no);
-                                    }}
-                                    onError={(e) => {
-                                      console.error('❌ Image load error at index:', index, 'serial:', item?.serial_no, e?.nativeEvent?.error);
-                                    }}
-                                  />
-                                )}
-                              </View>
-                            );
-                          }}
+                          renderItem={({ item, index }) => (
+                            <VideoTemplateItem
+                              item={item}
+                              index={index}
+                              containerWidth={containerWidth}
+                              containerHeight={containerHeight}
+                              isCurrentVideo={index === currentReelIndex}
+                            />
+                          )}
                           pagingEnabled
                           showsVerticalScrollIndicator={false}
                           snapToAlignment="start"

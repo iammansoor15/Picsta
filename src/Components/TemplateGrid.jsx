@@ -299,8 +299,18 @@ const TemplateGrid = ({
             playInBackground={false}
             playWhenInactive={false}
             posterResizeMode="cover"
+            bufferConfig={{
+              minBufferMs: 15000,
+              maxBufferMs: 50000,
+              bufferForPlaybackMs: 2500,
+              bufferForPlaybackAfterRebufferMs: 5000
+            }}
+            maxBitRate={2000000}
             onLoad={(data) => {
               console.log('✅ Video loaded successfully:', item.serial_no, data);
+            }}
+            onBuffer={(buffering) => {
+              console.log('📊 Video buffering status:', item.serial_no, buffering);
             }}
             onError={(error) => {
               console.error('❌ Template video load error:', item.serial_no, error);
