@@ -24,6 +24,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Keyboard,
+  Alert,
 } from 'react-native';
 import CustomAlert from '../Components/CustomAlert';
 import Reanimated, {
@@ -418,7 +419,7 @@ const DynamicPhotoElement = ({
 
 
 // Separate component for video template items to use hooks properly
-const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCurrentVideo }) => {
+const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCurrentVideo, onCached, hideVideoForCapture = false, captureBgColor = 'transparent' }) => {
   const [localUri, setLocalUri] = React.useState(null);
   const [downloadProgress, setDownloadProgress] = React.useState(0);
   const [isDownloading, setIsDownloading] = React.useState(false);
@@ -453,6 +454,7 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
           const localFileUri = Platform.OS === 'android' ? `file://${downloadPath}` : downloadPath;
           console.log('📁 Using cached file URI:', localFileUri);
           setLocalUri(localFileUri);
+          try { onCached && onCached(localFileUri); } catch (_) {}
           setIsReady(true);
           setIsDownloading(false);
           return;
@@ -485,6 +487,7 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
           const localFileUri = Platform.OS === 'android' ? `file://${downloadPath}` : downloadPath;
           console.log('📁 Local file URI:', localFileUri);
           setLocalUri(localFileUri);
+          try { onCached && onCached(localFileUri); } catch (_) {}
           setIsReady(true);
         } else {
           console.error('❌ Download failed with status:', result.statusCode);
@@ -529,10 +532,10 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
   const showLoading = isVideo && isDownloading;
   
   return (
-    <View style={{ width: containerWidth, height: containerHeight }}>
+    <View style={{ width: containerWidth, height: containerHeight, backgroundColor: captureBgColor || 'transparent' }}>
       {isVideo ? (
         <>
-          {localUri ? (
+          {localUri && !hideVideoForCapture ? (
             <Video
               ref={videoRef}
               source={{ uri: localUri }}
@@ -2346,6 +2349,9 @@ React.useEffect(() => {
   const [savedTemplateUri, setSavedTemplateUri] = useState(null);
   // Hide UI chrome (share/download/menu) during capture
   const [isCapturing, setIsCapturing] = useState(false);
+  // Video overlay capture state and cache
+  const [isOverlayCapture, setIsOverlayCapture] = useState(false);
+  const [currentVideoLocalUri, setCurrentVideoLocalUri] = useState(null);
   
   // Banner toggle state
   const [bannerEnabled, setBannerEnabled] = useState(false);
@@ -2877,54 +2883,62 @@ React.useEffect(() => {
         templateSerial: currentTemplate?.serial_no
       });
       
-      // If it's a video, download and save  the template video
+      // If it's a video, export a composed video (base video + overlays captured from template)
       if (isVideo && videoUrl) {
         try {
-          console.log('🎥 Downloading video template...');
-          
+          console.log('🎥 Composing video with overlays...');
           const RNFS = require('react-native-fs');
-          const timestamp = Date.now();
-          const filename = `narayana_video_${timestamp}.mp4`;
-          const downloadPath = `${RNFS.CachesDirectoryPath}/${filename}`;
-          
-          // Download video
-          const downloadResult = await RNFS.downloadFile({
-            fromUrl: videoUrl,
-            toFile: downloadPath,
-          }).promise;
-          
-          if (downloadResult.statusCode !== 200) {
-            throw new Error(`Download failed: ${downloadResult.statusCode}`);
-          }
-          
-          console.log('✅ Video downloaded:', downloadPath);
-          
-          // Save to gallery
-          const savedUri = await CameraRoll.save(downloadPath, {
-            type: 'video',
-            album: 'Narayana Templates'
-          });
-          
-          console.log('✅ Video saved to gallery:', savedUri);
-          
-          try { setSavedTemplateUri(savedUri); } catch (e) {}
-          
-          Alert.alert(
-            'Success! 🎥', 
-            `Your video template has been saved!\n\nYou can find it in your Photos/Gallery app under the 'Narayana Templates' album.`,
-            [{ text: 'Great!', style: 'default' }]
-          );
-          
-          // Clean up temp file
+          let FFmpegKitLib = null;
           try {
-            await RNFS.unlink(downloadPath);
-          } catch (e) {}
-          
+            FFmpegKitLib = require('ffmpeg-kit-react-native');
+          } catch (e) {
+            FFmpegKitLib = null;
+          }
+          if (!FFmpegKitLib || !FFmpegKitLib.FFmpegKit) {
+            throw new Error('Video composition module not installed. Install ffmpeg-kit-react-native and rebuild.');
+          }
+          const { FFmpegKit } = FFmpegKitLib;
+
+          // Prefer cached local video path from current item, fallback to fresh download
+          let baseVideoPath = currentVideoLocalUri && currentVideoLocalUri.replace(/^file:\/\//, '');
+          if (!baseVideoPath) {
+            const ts = Date.now();
+            const tmpVid = `${RNFS.CachesDirectoryPath}/narayana_video_${ts}.mp4`;
+            const res = await RNFS.downloadFile({ fromUrl: videoUrl, toFile: tmpVid }).promise;
+            if (res.statusCode !== 200) throw new Error(`Download failed: ${res.statusCode}`);
+            baseVideoPath = tmpVid;
+          }
+
+          // Capture overlay by temporarily hiding the video and using a chroma background
+          setIsOverlayCapture(true);
+          await new Promise(r => setTimeout(r, 100));
+          const overlayPng = await viewShotRef.current.capture({ format: 'png', quality: 1, result: 'tmpfile' });
+          setIsOverlayCapture(false);
+
+          // Prepare output path
+          const outPath = `${RNFS.CachesDirectoryPath}/narayana_composed_${Date.now()}.mp4`;
+
+          // Build ffmpeg command: key out green and overlay full-frame over base video
+          const safeBase = baseVideoPath.replace(/\\/g, '/');
+          const safeOv = overlayPng.replace(/^file:\/\//, '').replace(/\\/g, '/');
+          const safeOut = outPath.replace(/\\/g, '/');
+          const cmd = `-y -i "${safeBase}" -loop 1 -i "${safeOv}" -filter_complex "[1:v]colorkey=0x00FF00:0.3:0.1,scale2ref[ovr][base];[0:v][ovr]overlay=0:0:format=auto" -c:a copy -shortest "${safeOut}"`;
+          const session = await FFmpegKit.execute(cmd);
+          // We assume success if no exception; save to gallery
+          const savedUri = await CameraRoll.save(outPath, { type: 'video', album: 'Narayana Templates' });
+          console.log('✅ Composed video saved to gallery:', savedUri);
+          try { setSavedTemplateUri(savedUri); } catch (e) {}
+          Alert.alert('Success! 🎥', 'Your video with overlays has been saved to the Narayana Templates album.', [{ text: 'Great!' }]);
+
+          // Cleanup temp overlay (keep base if it came from cache)
+          try { await RNFS.unlink(overlayPng); } catch (_) {}
+
           return savedUri;
-          
         } catch (videoError) {
-          console.error('❌ Video save failed:', videoError);
+          console.error('❌ Composed video save failed:', videoError);
           throw new Error(`Failed to save video: ${videoError.message}`);
+        } finally {
+          try { setIsOverlayCapture(false); } catch (_) {}
         }
       }
       
@@ -4123,6 +4137,9 @@ onHandlerStateChange={({ nativeEvent }) => {
                               containerWidth={containerWidth}
                               containerHeight={containerHeight}
                               isCurrentVideo={index === currentReelIndex}
+                              hideVideoForCapture={isOverlayCapture}
+                              captureBgColor={isOverlayCapture ? '#00FF00' : 'transparent'}
+                              onCached={(uri) => { try { if (index === currentReelIndex) setCurrentVideoLocalUri(uri); } catch (e) {} }}
                             />
                           )}
                           pagingEnabled
