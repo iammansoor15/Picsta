@@ -3915,15 +3915,37 @@ const imageUrl = template.image_url || template.secure_url || template.url || nu
     <TouchableWithoutFeedback onPress={handleBackgroundPress}>
       <View style={{ flex: 1 }}>
         
-        {/* In-app header with profile avatar (taps to ProfileScreen) */}
-        <CustomHeader
-          title="Picstar"
-          showBack={false}
-          showBackButton={false}
-          backgroundColor={'#9C27B0'}
-          titleColor={'#FFFFFF'}
-          showProfilePhoto={true}
-        />
+        {/* Profile photo component */}
+        <TouchableOpacity
+          onPress={async () => {
+            try {
+              const token = await AsyncStorage.getItem('AUTH_TOKEN');
+              if (!token) {
+                navigation.navigate('ProfileEntry');
+                return;
+              }
+            } catch (e) {
+              navigation.navigate('ProfileEntry');
+              return;
+            }
+            navigation.navigate('ProfileScreen');
+          }}
+          style={styles.profilePhotoContainerUnderHeader}
+          activeOpacity={0.8}
+        >
+          <Image
+            source={(() => {
+              try {
+                if (profilePictureUri && !isDefaultPicture) {
+                  return { uri: profilePictureUri };
+                }
+              } catch {}
+              return getDefaultProfileImage();
+            })()}
+            style={styles.profilePhotoUnderHeader}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
 
 
         {/* TEMPORARY: Debug component for testing button toggle */}
@@ -4868,6 +4890,22 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
 export default HeroScreen;
 
 const styles = StyleSheet.create({
+  profilePhotoContainerUnderHeader: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    alignSelf: 'flex-end',
+    marginRight: 16,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  profilePhotoUnderHeader: {
+    width: '100%',
+    height: '100%',
+  },
   processingOverlay: {
     position: 'absolute',
     top: 0,
