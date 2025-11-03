@@ -4268,6 +4268,22 @@ onHandlerStateChange={({ nativeEvent }) => {
                 >
                   <AntDesign name="download" size={20} color="#fff" />
                 </TouchableOpacity>
+
+                {bannerUri ? (
+                  <TouchableOpacity 
+                    style={styles.actionIconButton}
+                    onPress={() => {
+                      try {
+                        setIsBannerFocused(false);
+                        setBannerEnabled(prev => !prev);
+                      } catch (e) {}
+                    }}
+                    activeOpacity={0.85}
+                    accessibilityLabel={bannerEnabled ? "Hide banner" : "Show banner"}
+                  >
+                    <Feather name="tag" size={20} color="#fff" />
+                  </TouchableOpacity>
+                ) : null}
                 {/* Menu toggle icon */}
                 <TouchableOpacity
                   style={styles.actionIconButton}
@@ -4657,9 +4673,9 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     </Text>
                   </TouchableOpacity>
 
-                  {/* Banner button: pick image → crop (5:1) → set as top banner */}
+                  {/* Banner button: open dialog to create/use/remove banners */}
                   <TouchableOpacity 
-                    style={[styles.bannerButton, bannerEnabled && styles.bannerButtonActive]}
+                    style={styles.bannerButton}
                     disabled={false}
                     onPress={() => {
                       try { setShowBannerDialog(true); } catch (e) {}
@@ -4671,7 +4687,7 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     <View style={styles.menuIconCircle}>
                       <Text style={[styles.menuIconGlyph, styles.menuIconShrink, styles.menuIconText]}>🏷️</Text>
                     </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Banner</Text>
+                    <Text style={styles.menuLabelText} numberOfLines={2}>Add Banner</Text>
                   </TouchableOpacity>
 
                   {/* Text / Photo / Reset */}
