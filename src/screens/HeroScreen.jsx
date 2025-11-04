@@ -700,37 +700,6 @@ const HeroScreen = ({ route, navigation }) => {
   const categories = useSelector(selectCategories);
   const [reelsTemplates, setReelsTemplates] = useState([]);
   
-  // Log templates array changes
-  React.useEffect(() => {
-    console.log('\n' + '*'.repeat(80));
-    console.log('🎬 TEMPLATES ARRAY UPDATED');
-    console.log('*'.repeat(80));
-    console.log('🎬 Templates Array Updated:', {
-      totalCount: reelsTemplates.length,
-      hasTemplates: reelsTemplates.length > 0,
-      firstTemplateSerial: reelsTemplates[0]?.serial_no,
-      lastTemplateSerial: reelsTemplates[reelsTemplates.length - 1]?.serial_no,
-      serialRange: reelsTemplates.length > 0 ? `${reelsTemplates[0]?.serial_no}-${reelsTemplates[reelsTemplates.length - 1]?.serial_no}` : 'empty',
-      categories: [...new Set(reelsTemplates.map(t => t.subcategory || t.category))],
-      timestamp: new Date().toISOString()
-    });
-    
-    // Log detailed breakdown of each template
-    if (reelsTemplates.length > 0) {
-      console.log('\n📋 DETAILED TEMPLATE BREAKDOWN:');
-      reelsTemplates.forEach((template, idx) => {
-        const isVideo = template.resource_type === 'video' || !!template.video_url;
-        console.log(`  [${idx}] Serial: ${template.serial_no} | Type: ${isVideo ? '🎥 VIDEO' : '🖼️ IMAGE'} | Category: ${template.subcategory || template.category}`);
-        if (template.video_url) {
-          console.log(`       Video URL: ${template.video_url.substring(0, 70)}...`);
-        }
-        if (template.image_url) {
-          console.log(`       Image URL: ${template.image_url.substring(0, 70)}...`);
-        }
-      });
-    }
-    console.log('*'.repeat(80) + '\n');
-  }, [reelsTemplates]);
   const [isReelsLoading, setIsReelsLoading] = useState(false);
   
 // Selected category for filtering templates
@@ -1559,15 +1528,6 @@ const HeroScreen = ({ route, navigation }) => {
         setReelsTemplates([normalizedDoc]);
         setCurrentSerial(Number(doc?.serial_no || fallbackSerial || 1));
         
-        console.log('✅ Applied template doc:', {
-          serial_no: doc?.serial_no,
-          isVideo,
-          hasVideoUrl: !!doc?.video_url,
-          hasImageUrl: !!doc?.image_url,
-          resource_type: normalizedDoc.resource_type,
-          videoUrl: doc?.video_url?.substring(0, 60),
-          imageUrl: doc?.image_url?.substring(0, 60)
-        });
 
         // Apply saved photo container axis from MongoDB, if present
         try {
@@ -2992,62 +2952,62 @@ React.useEffect(() => {
         templateSerial: currentTemplate?.serial_no
       });
       
-      // If it's a video, export a composed video (base video + overlays captured from template)
+      // If it's a video, download and save directly to gallery
       if (isVideo && videoUrl) {
         try {
-          console.log('🎥 Composing video with overlays...');
+          console.log('🎥 Downloading video for saving...');
           const RNFS = require('react-native-fs');
-          let FFmpegKitLib = null;
-          try {
-            FFmpegKitLib = require('ffmpeg-kit-react-native');
-          } catch (e) {
-            FFmpegKitLib = null;
+          
+          const timestamp = Date.now();
+          const downloadPath = `${RNFS.CachesDirectoryPath}/narayana_video_${timestamp}.mp4`;
+          
+          console.log('📥 Downloading from:', videoUrl?.substring(0, 60));
+          
+          // Download video from Cloudinary
+          const downloadResult = await RNFS.downloadFile({
+            fromUrl: videoUrl,
+            toFile: downloadPath,
+          }).promise;
+          
+          if (downloadResult.statusCode !== 200) {
+            throw new Error(`Download failed with status: ${downloadResult.statusCode}`);
           }
-          if (!FFmpegKitLib || !FFmpegKitLib.FFmpegKit) {
-            throw new Error('Video composition module not installed. Install ffmpeg-kit-react-native and rebuild.');
+          
+          console.log('✅ Video downloaded to:', downloadPath);
+          
+          // Verify file exists
+          const fileExists = await RNFS.exists(downloadPath);
+          if (!fileExists) {
+            throw new Error('Downloaded video file not found');
           }
-          const { FFmpegKit } = FFmpegKitLib;
-
-          // Prefer cached local video path from current item, fallback to fresh download
-          let baseVideoPath = currentVideoLocalUri && currentVideoLocalUri.replace(/^file:\/\//, '');
-          if (!baseVideoPath) {
-            const ts = Date.now();
-            const tmpVid = `${RNFS.CachesDirectoryPath}/narayana_video_${ts}.mp4`;
-            const res = await RNFS.downloadFile({ fromUrl: videoUrl, toFile: tmpVid }).promise;
-            if (res.statusCode !== 200) throw new Error(`Download failed: ${res.statusCode}`);
-            baseVideoPath = tmpVid;
-          }
-
-          // Capture overlay by temporarily hiding the video and using a chroma background
-          setIsOverlayCapture(true);
-          await new Promise(r => setTimeout(r, 100));
-          const overlayPng = await viewShotRef.current.capture({ format: 'png', quality: 1, result: 'tmpfile' });
-          setIsOverlayCapture(false);
-
-          // Prepare output path
-          const outPath = `${RNFS.CachesDirectoryPath}/narayana_composed_${Date.now()}.mp4`;
-
-          // Build ffmpeg command: key out green and overlay full-frame over base video
-          const safeBase = baseVideoPath.replace(/\\/g, '/');
-          const safeOv = overlayPng.replace(/^file:\/\//, '').replace(/\\/g, '/');
-          const safeOut = outPath.replace(/\\/g, '/');
-          const cmd = `-y -i "${safeBase}" -loop 1 -i "${safeOv}" -filter_complex "[1:v]colorkey=0x00FF00:0.3:0.1,scale2ref[ovr][base];[0:v][ovr]overlay=0:0:format=auto" -c:a copy -shortest "${safeOut}"`;
-          const session = await FFmpegKit.execute(cmd);
-          // We assume success if no exception; save to gallery
-          const savedUri = await CameraRoll.save(outPath, { type: 'video', album: 'Narayana Templates' });
-          console.log('✅ Composed video saved to gallery:', savedUri);
+          
+          // Save to gallery
+          const savedUri = await CameraRoll.save(downloadPath, {
+            type: 'video',
+            album: 'Narayana Templates'
+          });
+          
+          console.log('✅ Video saved to gallery:', savedUri);
+          
           try { setSavedTemplateUri(savedUri); } catch (e) {}
-          Alert.alert('Success! 🎥', 'Your video with overlays has been saved to the Narayana Templates album.', [{ text: 'Great!' }]);
-
-          // Cleanup temp overlay (keep base if it came from cache)
-          try { await RNFS.unlink(overlayPng); } catch (_) {}
-
+          
+          Alert.alert(
+            'Success! 🎥',
+            'Your video template has been saved to the Narayana Templates album.',
+            [{ text: 'Great!' }]
+          );
+          
+          // Cleanup temporary file
+          try {
+            await RNFS.unlink(downloadPath);
+          } catch (e) {
+            console.warn('Failed to cleanup temp video:', e);
+          }
+          
           return savedUri;
         } catch (videoError) {
-          console.error('❌ Composed video save failed:', videoError);
+          console.error('❌ Video save failed:', videoError);
           throw new Error(`Failed to save video: ${videoError.message}`);
-        } finally {
-          try { setIsOverlayCapture(false); } catch (_) {}
         }
       }
       

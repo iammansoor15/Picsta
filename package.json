@@ -13,7 +13,6 @@
     "@bam.tech/react-native-image-resizer": "^3.0.11",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-camera-roll/camera-roll": "^7.10.2",
-    "@react-native-oh-tpl/react-native-ffmpeg-kit": "^6.0.2-0.0.2-rc.2",
     "@react-navigation/native": "^7.1.17",
     "@react-navigation/native-stack": "^7.3.26",
     "@reduxjs/toolkit": "^2.9.0",

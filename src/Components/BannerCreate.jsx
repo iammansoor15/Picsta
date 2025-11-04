@@ -25,19 +25,10 @@ export default function BannerCreate({ navigation }) {
     { name: 'Lavender & Violet', bg: '#fffaf3', shop: '#6b21a8', addr: '#7e22ce', top: '#581c87', font: 'cursive' },
     { name: 'Sky & Navy', bg: '#fffaf3', shop: '#1e3a8a', addr: '#1d4ed8', top: '#1e40af', font: 'sans-serif' },
     { name: 'Beige & Coffee', bg: '#fffaf3', shop: '#5c4033', addr: '#654321', top: '#3e2723', font: 'serif' },
-    { name: 'Powder Blue & Midnight', bg: '#fffaf3', shop: '#0f172a', addr: '#1e293b', top: '#0a0a23', font: 'monospace' },
-    { name: 'Blush & Burgundy', bg: '#fffaf3', shop: '#800020', addr: '#991b1b', top: '#450a0a', font: 'cursive' },
-    { name: 'Pearl & Olive', bg: '#fffaf3', shop: '#3f6212', addr: '#4d7c0f', top: '#365314', font: 'sans-serif' },
-    { name: 'Honey & Walnut', bg: '#fffaf3', shop: '#5c3317', addr: '#7c2d12', top: '#431407', font: 'serif' },
-    { name: 'Mist & Steel', bg: '#fffaf3', shop: '#334155', addr: '#1e293b', top: '#0f172a', font: 'monospace' },
-    { name: 'Lilac & Plum', bg: '#fffaf3', shop: '#4c1d95', addr: '#6d28d9', top: '#3b0764', font: 'serif' },
-    { name: 'Rose & Chestnut', bg: '#fffaf3', shop: '#7f1d1d', addr: '#9f1239', top: '#450a0a', font: 'cursive' },
-    { name: 'Aqua & Navy', bg: '#fffaf3', shop: '#082f49', addr: '#0c4a6e', top: '#172554', font: 'sans-serif' },
-    { name: 'Sand & Rust', bg: '#fffaf3', shop: '#78350f', addr: '#92400e', top: '#451a03', font: 'serif' },
-    { name: 'Butter & Emerald', bg: '#fffaf3', shop: '#065f46', addr: '#047857', top: '#064e3b', font: 'sans-serif' },
-    { name: 'Coral & Charcoal', bg: '#fffaf3', shop: '#292524', addr: '#44403c', top: '#1c1917', font: 'monospace' },
-    { name: 'Snow & Sapphire', bg: '#fffaf3', shop: '#1e40af', addr: '#F5E427', top: '#172554', font: 'sans-serif' },
-    { name: 'Lemon & Forest', bg: '#fffaf3', shop: '#14532d', addr: '#166534', top: '#052e16', font: 'serif' },
+    { name: 'Crimson & White', bg: '#b91c1c', shop: '#ffffff', addr: '#fef2f2', top: '#f5f5f5', font: 'serif' },
+    { name: 'Jet Black & Ivory', bg: '#0a0a0a', shop: '#fafaf9', addr: '#e5e5e5', top: '#f0f0f0', font: 'sans-serif' },
+    { name: 'Forest Green & Cream', bg: '#064e3b', shop: '#fefce8', addr: '#fef9c3', top: '#fafaf9', font: 'serif' },
+    { name: 'Charcoal & Gold', bg: '#1c1917', shop: '#facc15', addr: '#fde68a', top: '#fef9c3', font: 'serif' },
   ]), []);
 
   const saveBanner = async () => {
@@ -59,16 +50,18 @@ export default function BannerCreate({ navigation }) {
   const baseW = 720;
   const scale = Math.min(1, bannerWidth / baseW);
   // Base sizes
-  const shopBase = Math.round(48 * scale);
-  const addrBase = Math.round(22 * scale);
+  const shopBase = Math.round(28 * scale);
+  const addrBase = Math.round(14 * scale);
   const ownerBase = Math.round(14 * scale);
-  const phoneBase = Math.round(13 * scale);
-  // Apply requested reductions: shop -20%, details -50%
+  const phoneBase = Math.round(14 * scale);
+  const iconBase = Math.round(12 * scale);
+  // Adjusted sizes
   const sizes = {
-    shop: Math.max(20, Math.round(shopBase * 0.8)),
-    addr: Math.max(10, Math.round(addrBase * 0.5)),
-    owner: Math.max(10, Math.round(ownerBase * 0.5)),
-    phone: Math.max(10, Math.round(phoneBase * 0.5)),
+    shop: Math.max(16, shopBase),
+    addr: Math.max(10, addrBase),
+    owner: Math.max(10, ownerBase),
+    phone: Math.max(10, phoneBase),
+    icon: Math.max(10, iconBase),
     pad: Math.max(12, Math.round(25 * scale)),
   };
   const previewTheme = theme || themes[0];
@@ -79,17 +72,28 @@ export default function BannerCreate({ navigation }) {
         <Text style={styles.sectionTitle}>Preview</Text>
         <View style={styles.previewCard}>
           <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
-            <View style={[styles.banner, { width: bannerWidth, aspectRatio: 5, backgroundColor: previewTheme.bg, borderColor: previewTheme.shop, paddingTop: sizes.pad, paddingHorizontal: sizes.pad, paddingBottom: 4 }]} collapsable={false}>
-              <View style={styles.topRight}>
-                <Text style={[styles.owner, { color: previewTheme.top, fontFamily: previewTheme.font, fontSize: sizes.owner }]} numberOfLines={1}>{ownerName}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                  <Ionicons name="call-outline" size={Math.max(10, Math.round((14 * scale) * 0.5))} color={previewTheme.top} style={{ marginRight: 4 }} />
-                  <Text style={[styles.phone, { color: previewTheme.top, fontFamily: previewTheme.font, fontSize: sizes.phone }]} numberOfLines={1}>{phone}</Text>
+            <View style={[styles.banner, { width: bannerWidth, aspectRatio: 5, backgroundColor: previewTheme.bg, borderColor: previewTheme.shop, padding: sizes.pad }]} collapsable={false}>
+              {/* Top Row with Owner (Left) and Phone (Right) */}
+              <View style={styles.topRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="person-outline" size={sizes.icon} color={previewTheme.top} style={{ marginRight: 4 }} />
+                  {ownerName && (
+                    <Text style={[styles.owner, { color: previewTheme.top, fontFamily: previewTheme.font, fontSize: sizes.owner }]} numberOfLines={1}>{ownerName}</Text>
+                  )}
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="call-outline" size={sizes.icon} color={previewTheme.top} style={{ marginRight: 4 }} />
+                  {phone && (
+                    <Text style={[styles.phone, { color: previewTheme.top, fontFamily: previewTheme.font, fontSize: sizes.phone }]} numberOfLines={1}>{phone}</Text>
+                  )}
                 </View>
               </View>
+
+              {/* Bottom Content */}
               <View style={styles.bottomContent}>
                 <Text style={[styles.shopName, { color: previewTheme.shop, fontFamily: previewTheme.font, fontSize: sizes.shop }]} numberOfLines={1} adjustsFontSizeToFit ellipsizeMode="tail">{shopName || 'Your Shop Name'}</Text>
-                <Text style={[styles.address, { color: previewTheme.addr, fontFamily: previewTheme.font, fontSize: sizes.addr, marginTop: 2 }]} numberOfLines={1} adjustsFontSizeToFit ellipsizeMode="tail">{address || 'Your Address'}</Text>
+                <Text style={[styles.address, { color: previewTheme.addr, fontFamily: previewTheme.font, fontSize: sizes.addr }]} numberOfLines={1} adjustsFontSizeToFit ellipsizeMode="tail">{address || 'Your Address'}</Text>
               </View>
             </View>
           </ViewShot>
@@ -176,14 +180,13 @@ const styles = StyleSheet.create({
   stickyHeader: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, backgroundColor: '#f3f4f6', borderBottomWidth: 1, borderColor: '#e5e7eb' },
   previewCard: { alignItems: 'center', justifyContent: 'center', padding: 12, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, backgroundColor: '#fff' },
   bannerWrapper: { alignItems: 'center', justifyContent: 'center', marginTop: 16, borderWidth: 0 },
-  banner: { padding: 25, position: 'relative', alignItems: 'center', justifyContent: 'center', borderRadius: 0, borderWidth: 1 },
-  shopName: { fontSize: 48, fontWeight: '800', textAlign: 'center' },
-  address: { fontSize: 28, marginTop: 2, textAlign: 'center' },
-  topRight: { position: 'absolute', top: 2, right: 10, alignItems: 'flex-end' },
+  banner: { padding: 25, position: 'relative', alignItems: 'center', justifyContent: 'center', borderRadius: 0 },
+  shopName: { fontSize: 28, fontWeight: '800', textAlign: 'center' },
+  address: { fontSize: 14, textAlign: 'center' },
+  topRow: { position: 'absolute', top: 10, left: 10, right: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   owner: { fontSize: 14, fontWeight: '600' },
-  phone: { fontSize: 13 },
-  centerContent: { alignItems: 'center', justifyContent: 'center' },
-  bottomContent: { position: 'absolute', left: 10, right: 10, bottom: 4, alignItems: 'center' },
+  phone: { fontSize: 14 },
+  bottomContent: { position: 'absolute', bottom: 10, left: 10, right: 10, alignItems: 'center' },
   saveButton: { backgroundColor: COLORS.accent, paddingVertical: SPACING.md, paddingHorizontal: SPACING.lg, borderRadius: 8, marginTop: SPACING.lg, alignSelf: 'center' },
   saveButtonText: { ...TYPOGRAPHY.button, color: COLORS.white },
 });
