@@ -33,6 +33,8 @@ const DraggableText = ({
 }) => {
   const translateX = useSharedValue(textElement.x || 0);
   const translateY = useSharedValue(textElement.y || 0);
+  const lastPropX = useRef(textElement.x || 0);
+  const lastPropY = useRef(textElement.y || 0);
   
   // Debug initial positioning
   React.useEffect(() => {
@@ -55,17 +57,17 @@ const DraggableText = ({
   }, []);
 
   // Keep local position in sync when parent updates textElement.x/y (e.g., applying server axis)
-  // Use ref to track last applied values to avoid fighting with drag gestures
-  const lastPropsRef = useRef({ x: Number(textElement.x) || 0, y: Number(textElement.y) || 0 });
+  // BUT only if the prop change is significant (not just echo from our own update)
   useEffect(() => {
-    const x = Number(textElement.x) || 0;
-    const y = Number(textElement.y) || 0;
-    // Only sync if props actually changed (not just re-render during drag)
-    if (lastPropsRef.current.x !== x || lastPropsRef.current.y !== y) {
-      try { console.log('🏷️[Text]', textElement.id, 'props->sync (changed)', { oldX: lastPropsRef.current.x, oldY: lastPropsRef.current.y, newX: x, newY: y }); } catch {}
-      translateX.value = x;
-      translateY.value = y;
-      lastPropsRef.current = { x, y };
+    const propX = textElement.x || 0;
+    const propY = textElement.y || 0;
+    
+    // Only sync if props actually changed by a meaningful amount
+    if (Math.abs(propX - lastPropX.current) > 1 || Math.abs(propY - lastPropY.current) > 1) {
+      translateX.value = propX;
+      translateY.value = propY;
+      lastPropX.current = propX;
+      lastPropY.current = propY;
     }
   }, [textElement.x, textElement.y]);
 
@@ -97,25 +99,17 @@ const DraggableText = ({
   const [isKeyboardShowing, setIsKeyboardShowing] = useState(false);
 
   // PanResponder for dragging with boundary constraints
-  let startX = 0;
-  let startY = 0;
+  const startXRef = useRef(0);
+  const startYRef = useRef(0);
   
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => {
-        try { console.log('🏷️[Text]', textElement.id, 'startShouldSet', { isEditing }); } catch {}
-        return !isEditing;
-      },
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        const should = !isEditing && (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3);
-        try { console.log('🏷️[Text]', textElement.id, 'moveShouldSet', { dx: gestureState.dx, dy: gestureState.dy, should }); } catch {}
-        return should;
-      },
+      onStartShouldSetPanResponder: () => !isEditing,
+      onMoveShouldSetPanResponder: (evt, gestureState) => !isEditing && (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3),
       onPanResponderGrant: () => {
         try { onDragStart && onDragStart(); } catch (e) {}
-        startX = translateX.value;
-        startY = translateY.value;
-        try { console.log('🏷️[Text]', textElement.id, 'grant', { startX, startY, containerWidth, containerHeight, size: containerDimensions }); } catch {}
+        startXRef.current = translateX.value;
+        startYRef.current = translateY.value;
       },
       onPanResponderMove: (e, gestureState) => {
         // Calculate boundaries with minimal padding for full movement
@@ -130,8 +124,8 @@ const DraggableText = ({
         const maxY = Math.max(0, containerHeight - textHeight); // Prevent overflow
         
         // Calculate proposed new position
-        const proposedX = startX + gestureState.dx;
-        const proposedY = startY + gestureState.dy;
+        const proposedX = startXRef.current + gestureState.dx;
+        const proposedY = startYRef.current + gestureState.dy;
         
         // Clamp positions to boundaries
         const constrainedX = Math.max(minX, Math.min(maxX, proposedX));
@@ -153,7 +147,6 @@ const DraggableText = ({
         // Apply constrained movement
         translateX.value = constrainedX;
         translateY.value = constrainedY;
-        try { console.log('🏷️[Text]', textElement.id, 'move', { dx: gestureState.dx, dy: gestureState.dy, x: constrainedX, y: constrainedY }); } catch {}
       },
       onPanResponderRelease: (e, gestureState) => {
         try { onDragEnd && onDragEnd(); } catch (e) {}
@@ -172,7 +165,6 @@ const DraggableText = ({
         // Update position with constraints
         translateX.value = finalX;
         translateY.value = finalY;
-        try { console.log('🏷️[Text]', textElement.id, 'release->commit', { finalX, finalY }); } catch {}
         
         if (onPositionChange) {
           onPositionChange(textElement.id, finalX, finalY);

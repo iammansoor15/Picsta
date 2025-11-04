@@ -200,6 +200,8 @@ const DynamicPhotoElement = ({
   onDelete,
   onUpdatePosition,
   onUpdateSize,
+  onDragStart,
+  onDragEnd,
   containerWidth,
   containerHeight,
   minSize = 60,
@@ -207,19 +209,22 @@ const DynamicPhotoElement = ({
 }) => {
   const translateX = useSharedValue(x || 0);
   const translateY = useSharedValue(y || 0);
+  const lastPropX = React.useRef(x || 0);
+  const lastPropY = React.useRef(y || 0);
 
   // Keep local position in sync when props change (e.g., after programmatic updates)
-  // Use ref to track last applied values to avoid fighting with drag gestures
-  const lastPropsRef = React.useRef({ x: x || 0, y: y || 0 });
+  // BUT only if the prop change is significant (not just echo from our own update)
   React.useEffect(() => {
-    const newX = x || 0;
-    const newY = y || 0;
-    // Only sync if props actually changed (not just re-render)
-    if (lastPropsRef.current.x !== newX || lastPropsRef.current.y !== newY) {
-      try { console.log('🖼️[DynamicPhoto]', id, 'props->sync (changed)', { oldX: lastPropsRef.current.x, oldY: lastPropsRef.current.y, newX, newY }); } catch {}
-      translateX.value = newX;
-      translateY.value = newY;
-      lastPropsRef.current = { x: newX, y: newY };
+    const propX = x || 0;
+    const propY = y || 0;
+    
+    // Only sync if props actually changed by a meaningful amount
+    // This prevents echo-back from onUpdatePosition calls
+    if (Math.abs(propX - lastPropX.current) > 1 || Math.abs(propY - lastPropY.current) > 1) {
+      translateX.value = propX;
+      translateY.value = propY;
+      lastPropX.current = propX;
+      lastPropY.current = propY;
     }
   }, [x, y]);
 
@@ -233,47 +238,33 @@ const DynamicPhotoElement = ({
     };
   }, []);
 
-  let startX = 0;
-  let startY = 0;
-  let isDragging = false;
-  let hasMoved = false;
-  let gestureStartTime = 0;
+  const startXRef = React.useRef(0);
+  const startYRef = React.useRef(0);
+  const isDraggingRef = React.useRef(false);
+  const hasMovedRef = React.useRef(false);
+  const gestureStartTimeRef = React.useRef(0);
 
   const panResponder = React.useRef(
     PanResponder.create({
-      // Capture from start to avoid parent gestures stealing touches
-      onStartShouldSetPanResponder: () => {
-        try { console.log('🖼️[DynamicPhoto]', id, 'startShouldSet=true', { x: translateX.value, y: translateY.value }); } catch {}
-        return true;
-      },
-      onStartShouldSetPanResponderCapture: () => {
-        try { console.log('🖼️[DynamicPhoto]', id, 'startCapture=true'); } catch {}
-        return true;
-      },
+      // Let taps fall through to onPress handler; only capture when moving
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        const should = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
-        try { console.log('🖼️[DynamicPhoto]', id, 'moveShouldSet', { dx: gestureState.dx, dy: gestureState.dy, should }); } catch {}
-        return should;
-      },
-      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
-        const should = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
-        try { console.log('🖼️[DynamicPhoto]', id, 'moveCapture', { dx: gestureState.dx, dy: gestureState.dy, should }); } catch {}
-        return should;
+        return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
       },
       onPanResponderGrant: () => {
-        startX = translateX.value;
-        startY = translateY.value;
-        isDragging = false;
-        hasMoved = false;
-        gestureStartTime = Date.now();
-        try { console.log('🖼️[DynamicPhoto]', id, 'grant', { startX, startY, containerWidth, containerHeight, size }); } catch {}
+        startXRef.current = translateX.value;
+        startYRef.current = translateY.value;
+        isDraggingRef.current = false;
+        hasMovedRef.current = false;
+        gestureStartTimeRef.current = Date.now();
+        try { onDragStart && onDragStart(id); } catch (e) {}
       },
       onPanResponderMove: (evt, gestureState) => {
         if (Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2) {
-          hasMoved = true;
+          hasMovedRef.current = true;
         }
-        if (!isDragging && hasMoved) {
-          isDragging = true;
+        if (!isDraggingRef.current && hasMovedRef.current) {
+          isDraggingRef.current = true;
         }
 
         // Constrain within container bounds
@@ -283,15 +274,14 @@ const DynamicPhotoElement = ({
         const maxX = Math.max(minX, containerWidth - size - padding);
         const maxY = Math.max(minY, containerHeight - size - padding);
 
-        const newX = Math.max(minX, Math.min(maxX, startX + gestureState.dx));
-        const newY = Math.max(minY, Math.min(maxY, startY + gestureState.dy));
+        const newX = Math.max(minX, Math.min(maxX, startXRef.current + gestureState.dx));
+        const newY = Math.max(minY, Math.min(maxY, startYRef.current + gestureState.dy));
 
         translateX.value = newX;
         translateY.value = newY;
-        try { console.log('🖼️[DynamicPhoto]', id, 'move', { dx: gestureState.dx, dy: gestureState.dy, newX, newY }); } catch {}
       },
       onPanResponderRelease: (evt, gestureState) => {
-        const gestureTime = Date.now() - gestureStartTime;
+        const gestureTime = Date.now() - gestureStartTimeRef.current;
         const moved = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
 
         // Final clamp
@@ -307,9 +297,8 @@ const DynamicPhotoElement = ({
         translateX.value = finalX;
         translateY.value = finalY;
 
-        if (!(moved || isDragging || hasMoved) && gestureTime < 300) {
+        if (!(moved || isDraggingRef.current || hasMovedRef.current) && gestureTime < 300) {
           // Quick tap
-          try { console.log('🖼️[DynamicPhoto]', id, 'tap', { gestureTime }); } catch {}
           if (focused) {
             onPress && onPress(id);
           } else {
@@ -317,22 +306,20 @@ const DynamicPhotoElement = ({
           }
         } else {
           // Commit position update to parent state
-          try { console.log('🖼️[DynamicPhoto]', id, 'release->commit', { finalX, finalY }); } catch {}
           onUpdatePosition && onUpdatePosition(id, finalX, finalY);
         }
 
-        isDragging = false;
-        hasMoved = false;
-        gestureStartTime = 0;
+        isDraggingRef.current = false;
+        hasMovedRef.current = false;
+        gestureStartTimeRef.current = 0;
+        try { onDragEnd && onDragEnd(id); } catch (e) {}
       },
-      onPanResponderTerminationRequest: () => false,
       onPanResponderTerminate: () => {
-        isDragging = false;
-        hasMoved = false;
-        gestureStartTime = 0;
-        try { console.log('🖼️[DynamicPhoto]', id, 'terminate'); } catch {}
+        isDraggingRef.current = false;
+        hasMovedRef.current = false;
+        gestureStartTimeRef.current = 0;
+        try { onDragEnd && onDragEnd(id); } catch (e) {}
       },
-      onShouldBlockNativeResponder: () => true,
     })
   ).current;
 
@@ -442,16 +429,27 @@ const DynamicPhotoElement = ({
       {...panResponder.panHandlers}
     >
       {/* Capture taps to focus or open gallery when focused */}
-      {/* Render image directly; pan responder handles taps (quick) and drags */}
-      <Image
-        source={imageSource}
-        style={[
-          styles.dynamicPhotoImage,
-          { borderRadius: shape === 'circle' ? size / 2 : 8 },
-        ]}
-        resizeMode={resizeMode}
-        pointerEvents="none"
-      />
+      <TouchableOpacity
+        style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, zIndex: 1 }}
+        activeOpacity={0.9}
+        onPress={() => {
+          // Tap behavior: focus first, then open gallery when focused
+          if (focused) {
+            onPress && onPress(id);
+          } else {
+            onFocus && onFocus(id);
+          }
+        }}
+      >
+        <Image
+          source={imageSource}
+          style={[
+            styles.dynamicPhotoImage,
+            { borderRadius: shape === 'circle' ? size / 2 : 8 },
+          ]}
+          resizeMode={resizeMode}
+        />
+      </TouchableOpacity>
 
       {focused && (
         <>
@@ -983,6 +981,10 @@ const HeroScreen = ({ route, navigation }) => {
   }, [page, reelsTemplates.length, currentReelIndex, backStack.length]);
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current;
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    // Ignore template switching while dragging overlays
+    if (isDraggingRef.current) {
+      return;
+    }
     if (viewableItems && viewableItems.length > 0 && typeof viewableItems[0].index === 'number') {
       const newIndex = viewableItems[0].index;
       const prevIndex = currentIndexRef.current;
@@ -1540,11 +1542,12 @@ const HeroScreen = ({ route, navigation }) => {
             const maxY = Math.max(padding, containerHeight - photo1Size - padding);
             const clampedX = Math.max(padding, Math.min(maxX, rawX));
             const clampedY = Math.max(padding, Math.min(maxY, rawY));
-            // Update shared values for the static photo container position
-            try {
-              if (pan1X && typeof pan1X.value !== 'undefined') pan1X.value = clampedX;
-              if (pan1Y && typeof pan1Y.value !== 'undefined') pan1Y.value = clampedY;
-            } catch (e) {
+            // Only apply axis if user hasn't manually moved the static photo yet
+            if (!hasUserMovedStaticPhotoRef.current) {
+              try {
+                if (pan1X && typeof pan1X.value !== 'undefined') pan1X.value = clampedX;
+                if (pan1Y && typeof pan1Y.value !== 'undefined') pan1Y.value = clampedY;
+              } catch (e) {}
             }
           }
         } catch (e) {
@@ -1568,30 +1571,24 @@ const HeroScreen = ({ route, navigation }) => {
 
             // If a default text exists, update it; otherwise create one at the axis
             setTextElements(prev => {
-              if (Array.isArray(prev) && prev.length > 0) {
-                // Prefer default text if present
-                const idx = prev.findIndex(el => typeof el?.id === 'string' && el.id.startsWith('default-text-'));
-                const target = idx >= 0 ? idx : 0;
-                const copy = prev.slice();
-                copy[target] = { ...copy[target], x: tX, y: tY };
-                return copy;
+              // Only create a default text on first load; do NOT override existing positions
+              if (!Array.isArray(prev) || prev.length === 0) {
+                const newEl = {
+                  id: `default-text-${Date.now()}`,
+                  text: 'Your Text',
+                  x: tX,
+                  y: tY,
+                  width: tWidth,
+                  height: tHeight,
+                  color: COLORS.white,
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)'
+                };
+                try { if (defaultTextAddedRef && defaultTextAddedRef.current !== undefined) defaultTextAddedRef.current = true; } catch {}
+                return [newEl];
               }
-              // Create a minimal default text element at the provided axis
-              const newEl = {
-                id: `default-text-${Date.now()}`,
-                text: 'Your Text',
-                x: tX,
-                y: tY,
-                width: tWidth,
-                height: tHeight,
-                color: COLORS.white,
-                fontWeight: 'bold',
-                textAlign: 'center',
-                backgroundColor: 'rgba(0, 0, 0, 0.8)'
-              };
-              // Mark as added to avoid duplicate insertion elsewhere
-              try { if (defaultTextAddedRef && defaultTextAddedRef.current !== undefined) defaultTextAddedRef.current = true; } catch {}
-              return [newEl];
+              return prev;
             });
           }
         } catch (e) {
@@ -2207,8 +2204,10 @@ React.useEffect(() => {
     });
   };
 
-  // Track dragging state to prevent swipe navigation while dragging
+  // Track dragging state to prevent swipe/navigation and template changes while dragging
   const isDraggingRef = React.useRef(false);
+  const hasUserMovedStaticPhotoRef = React.useRef(false);
+  const movedTextIdsRef = React.useRef(new Set());
 
   // Animated style for single photo container
   const animatedStyle1 = useAnimatedStyle(() => {
@@ -2662,6 +2661,8 @@ React.useEffect(() => {
   };
 
   const updateTextPosition = (textId, x, y) => {
+    // Mark that this text has been manually moved
+    try { movedTextIdsRef.current.add(textId); } catch (e) {}
     setTextElements(prev => 
       prev.map(element => 
         element.id === textId ? { ...element, x, y } : element
@@ -3729,121 +3730,45 @@ React.useEffect(() => {
     }
   };
 
-  const createPanResponder = (panX, panY, photoNumber) => {
-    let isDragging = false;
-    let startX = 0;
-    let startY = 0;
-    let gestureStartTime = 0;
-    let hasMoved = false;
-    
-    const getCurrentX = () => panX.value;
-    const getCurrentY = () => panY.value;
-    const getPhotoSize = () => photoNumber === 1 ? photo1Size : photo2Size;
-    
-        return PanResponder.create({
-          // Capture from start to avoid parent gestures stealing touches
-          onStartShouldSetPanResponder: () => {
-            try { console.log('🖼️[StaticPhoto] startShouldSet=true', { x: getCurrentX(), y: getCurrentY() }); } catch {}
-            return true;
-          },
-          onStartShouldSetPanResponderCapture: () => {
-            try { console.log('🖼️[StaticPhoto] startCapture=true'); } catch {}
-            return true;
-          },
-          // Only start dragging if there's actual movement
-          onMoveShouldSetPanResponder: (evt, gestureState) => {
-            const shouldMove = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
-            try { console.log('🖼️[StaticPhoto] moveShouldSet', { dx: gestureState.dx, dy: gestureState.dy, shouldMove }); } catch {}
-            return shouldMove;
-          },
-          onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
-            const shouldMove = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
-            try { console.log('🖼️[StaticPhoto] moveCapture', { dx: gestureState.dx, dy: gestureState.dy, shouldMove }); } catch {}
-            return shouldMove;
-          },
+  // Track start position for pan gestures
+  const startPan1X = React.useRef(0);
+  const startPan1Y = React.useRef(0);
+  
+  const panResponder1 = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+      },
       onPanResponderGrant: (evt, gestureState) => {
-        isDragging = false;
-        hasMoved = false;
-        gestureStartTime = Date.now();
-        startX = getCurrentX();
-        startY = getCurrentY();
+        startPan1X.current = pan1X.value;
+        startPan1Y.current = pan1Y.value;
         try { isDraggingRef.current = true; } catch (e) {}
-        try { console.log('🖼️[StaticPhoto] grant', { startX, startY, containerWidth, containerHeight, size: getPhotoSize() }); } catch {}
       },
       onPanResponderMove: (evt, gestureState) => {
-        // Mark that we have movement
-        if (Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2) {
-          hasMoved = true;
-        }
+        const padding = BOUND_PADDING;
+        const maxX = containerWidth - photo1Size - padding;
+        const maxY = containerHeight - photo1Size - padding;
+        const minX = padding;
+        const minY = padding;
+        // Mark that user has manually moved the static photo
+        try { hasUserMovedStaticPhotoRef.current = true; } catch (e) {}
         
-        if (!isDragging && hasMoved) {
-          isDragging = true;
-        }
+        const newX = Math.max(minX, Math.min(maxX, startPan1X.current + gestureState.dx));
+        const newY = Math.max(minY, Math.min(maxY, startPan1Y.current + gestureState.dy));
         
-        if (isDragging) {
-          // Simple drag - no pinch-to-zoom
-          const photoSize = getPhotoSize();
-          const padding = BOUND_PADDING;
-          const maxX = containerWidth - photoSize - padding;
-          const maxY = containerHeight - photoSize - padding;
-          const minX = padding;
-          const minY = padding;
-          
-          const newX = Math.max(minX, Math.min(maxX, startX + gestureState.dx));
-          const newY = Math.max(minY, Math.min(maxY, startY + gestureState.dy));
-          
-          panX.value = newX;
-          panY.value = newY;
-          try { console.log('🖼️[StaticPhoto] move', { dx: gestureState.dx, dy: gestureState.dy, newX, newY }); } catch {}
-        }
+        pan1X.value = newX;
+        pan1Y.value = newY;
       },
-      onPanResponderRelease: (evt, gestureState) => {
-        const gestureTime = Date.now() - gestureStartTime;
-        const moved = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
-        
-        
-        if (moved || isDragging || hasMoved) {
-          try { console.log('🖼️[StaticPhoto] release (drag end)', { x: panX.value, y: panY.value, gestureTime }); } catch {}
-        } else if (gestureTime < 300) { // Quick tap (less than 300ms)
-          // For static photo (photo 1), first tap focuses (shows ✕). Next tap opens gallery
-          if (photoNumber === 1) {
-            if (!isPhoto1Focused) {
-              setIsPhoto1Focused(true);
-            } else {
-              try {
-                handlePhotoContainerPress(photoNumber);
-              } catch (error) {
-              }
-            }
-          } else {
-            try {
-              handlePhotoContainerPress(photoNumber);
-            } catch (error) {
-            }
-          }
-        }
-        
-        // Reset all states
-        isDragging = false;
-        hasMoved = false;
-        gestureStartTime = 0;
+      onPanResponderRelease: () => {
         try { isDraggingRef.current = false; } catch (e) {}
       },
       onPanResponderTerminationRequest: () => false,
-      
-      // Clean up on terminate
-      onPanResponderTerminate: (evt, gestureState) => {
-        isDragging = false;
-        hasMoved = false;
-        gestureStartTime = 0;
+      onPanResponderTerminate: () => {
         try { isDraggingRef.current = false; } catch (e) {}
-        try { console.log('🖼️[StaticPhoto] terminate'); } catch {}
       },
-      onShouldBlockNativeResponder: () => true,
-    });
-  };
-
-  const panResponder1 = useRef(createPanResponder(pan1X, pan1Y, 1)).current;
+    })
+  ).current;
   
   // Resize PanResponder for static photo (top-left handle)
   const initialPhoto1Resize = useRef({ size: photo1Size, cx: 0, cy: 0 });
@@ -4507,7 +4432,7 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
             )}
 
             {/* Tap overlay to handle focus on first tap and open gallery on second tap */}
-            {/* Image content - allow parent pan responder to handle taps and drags */}
+            {/* Image content wrapped in TouchableOpacity for tap handling */}
             {(() => {
               const toSource = (u) => {
                 try {
@@ -4533,16 +4458,28 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
               ];
 
               return (
-                <View style={[styles.photoImageMask, { borderRadius: shape === 'circle' ? photo1Size / 2 : 8 }]}
+                <TouchableOpacity
+                  style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, zIndex: 1 }}
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    // Tap behavior: focus first, then open gallery when focused
+                    if (isPhoto1Focused) {
+                      handlePhotoContainerPress(1);
+                    } else {
+                      setIsPhoto1Focused(true);
+                    }
+                  }}
                 >
-                  <Image
-                    key={typeof photo1Uri === 'string' ? photo1Uri : (photo1Uri && typeof photo1Uri === 'object' && photo1Uri.uri ? photo1Uri.uri : 'default_profile_image')}
-                    source={imageSource}
-                    style={sharedImageStyle}
-                    resizeMode={resizeMode}
-                    pointerEvents="none"
-                  />
-                </View>
+                  <View style={[styles.photoImageMask, { borderRadius: shape === 'circle' ? photo1Size / 2 : 8 }]}
+                  >
+                    <Image
+                      key={typeof photo1Uri === 'string' ? photo1Uri : (photo1Uri && typeof photo1Uri === 'object' && photo1Uri.uri ? photo1Uri.uri : 'default_profile_image')}
+                      source={imageSource}
+                      style={sharedImageStyle}
+                      resizeMode={resizeMode}
+                    />
+                  </View>
+                </TouchableOpacity>
               );
             })()}
             
@@ -4621,6 +4558,8 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                   onDelete={() => deletePhotoElement(photoElement.id)}
                   onUpdatePosition={(id, newX, newY) => updatePhotoPosition(id, newX, newY)}
                   onUpdateSize={(id, newSize) => updatePhotoSize(id, newSize)}
+                  onDragStart={() => { try { isDraggingRef.current = true; } catch (e) {} }}
+                  onDragEnd={() => { try { isDraggingRef.current = false; } catch (e) {} }}
                   containerWidth={containerWidth}
                   containerHeight={containerHeight}
                   minSize={minPhotoSize}
