@@ -54,6 +54,21 @@ const DraggableText = ({
     };
   }, []);
 
+  // Keep local position in sync when parent updates textElement.x/y (e.g., applying server axis)
+  // Use ref to track last applied values to avoid fighting with drag gestures
+  const lastPropsRef = useRef({ x: Number(textElement.x) || 0, y: Number(textElement.y) || 0 });
+  useEffect(() => {
+    const x = Number(textElement.x) || 0;
+    const y = Number(textElement.y) || 0;
+    // Only sync if props actually changed (not just re-render during drag)
+    if (lastPropsRef.current.x !== x || lastPropsRef.current.y !== y) {
+      try { console.log('🏷️[Text]', textElement.id, 'props->sync (changed)', { oldX: lastPropsRef.current.x, oldY: lastPropsRef.current.y, newX: x, newY: y }); } catch {}
+      translateX.value = x;
+      translateY.value = y;
+      lastPropsRef.current = { x, y };
+    }
+  }, [textElement.x, textElement.y]);
+
   const [isEditing, setIsEditing] = useState(false);
   const [currentText, setCurrentText] = useState(textElement.text);
   const [isResizing, setIsResizing] = useState(false);
@@ -87,12 +102,20 @@ const DraggableText = ({
   
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !isEditing,
-      onMoveShouldSetPanResponder: (evt, gestureState) => !isEditing && (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3),
+      onStartShouldSetPanResponder: () => {
+        try { console.log('🏷️[Text]', textElement.id, 'startShouldSet', { isEditing }); } catch {}
+        return !isEditing;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const should = !isEditing && (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3);
+        try { console.log('🏷️[Text]', textElement.id, 'moveShouldSet', { dx: gestureState.dx, dy: gestureState.dy, should }); } catch {}
+        return should;
+      },
       onPanResponderGrant: () => {
         try { onDragStart && onDragStart(); } catch (e) {}
         startX = translateX.value;
         startY = translateY.value;
+        try { console.log('🏷️[Text]', textElement.id, 'grant', { startX, startY, containerWidth, containerHeight, size: containerDimensions }); } catch {}
       },
       onPanResponderMove: (e, gestureState) => {
         // Calculate boundaries with minimal padding for full movement
@@ -130,6 +153,7 @@ const DraggableText = ({
         // Apply constrained movement
         translateX.value = constrainedX;
         translateY.value = constrainedY;
+        try { console.log('🏷️[Text]', textElement.id, 'move', { dx: gestureState.dx, dy: gestureState.dy, x: constrainedX, y: constrainedY }); } catch {}
       },
       onPanResponderRelease: (e, gestureState) => {
         try { onDragEnd && onDragEnd(); } catch (e) {}
@@ -148,6 +172,7 @@ const DraggableText = ({
         // Update position with constraints
         translateX.value = finalX;
         translateY.value = finalY;
+        try { console.log('🏷️[Text]', textElement.id, 'release->commit', { finalX, finalY }); } catch {}
         
         if (onPositionChange) {
           onPositionChange(textElement.id, finalX, finalY);
@@ -296,16 +321,16 @@ const DraggableText = ({
   
   // Listen for keyboard show/hide to move position
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
       setIsKeyboardShowing(true);
       if (isEditing) {
         // Move text container up to avoid keyboard (position already saved)
-        const keyboardHeight = 320;
+        const kbh = e && e.endCoordinates && e.endCoordinates.height ? e.endCoordinates.height : 320;
         const textHeight = containerDimensions.height || 40;
-        const safeZoneTop = containerHeight - keyboardHeight - textHeight - 50;
+        const safeZoneTop = containerHeight - kbh - textHeight - 20;
         if (translateY.value > safeZoneTop) {
-          const targetY = Math.max(20, safeZoneTop);
-          console.log('⬆️ Moving text up from', translateY.value, 'to', targetY);
+          const targetY = Math.max(10, safeZoneTop);
+          console.log('⬆️ Moving text up from', translateY.value, 'to', targetY, 'kb:', kbh);
           translateY.value = targetY;
           if (onPositionChange) {
             onPositionChange(textElement.id, translateX.value, targetY);

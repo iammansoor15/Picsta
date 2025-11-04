@@ -47,8 +47,6 @@ import { COLORS } from '../theme/colors';
 import backgroundRemovalService from '../services/BackgroundRemovalService';
 import ImageMetadataService from '../services/ImageMetadataService';
 import ImagePickerService from '../services/ImagePickerService';
-import FloatingActionButton from '../Components/FloatingActionButton';
-import AddTemplateModal from '../Components/AddTemplateModal';
 import BackgroundToggleService from '../services/BackgroundToggleService';
 // import BackgroundToggleDebugger from '../Components/BackgroundToggleDebugger';
 import TemplatePreferences from '../services/TemplatePreferences';
@@ -56,6 +54,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import CustomHeader from '../Components/CustomHeader';
 import Feather from 'react-native-vector-icons/Feather';
 import AntDesign from 'react-native-vector-icons/AntDesign';
+import { Svg, Path, Rect, Circle, Line } from 'react-native-svg';
 import { uploadTemplate } from '../store/slices/cloudinaryTemplateSlice';
 import { computeDefaultPositions } from '../utils/DefaultPositions';
 import { selectProfileImage, selectOriginalProfileImage } from '../store/slices/profileSlice';
@@ -75,6 +74,49 @@ const CONTAINER_PADDING = 35;
 // Available space within padding and menu bar
 const AVAILABLE_WIDTH = screenWidth - (CONTAINER_PADDING * 2);
 const AVAILABLE_HEIGHT = screenHeight - MENU_BAR_HEIGHT - (CONTAINER_PADDING * 2);
+
+// Minimal SVG icons for menu (requires react-native-svg)
+const BannerSvgIcon = ({ size = 28, color = '#000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M6 3h12a1 1 0 0 1 1 1v16l-7-3-7 3V4a1 1 0 0 1 1-1z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const TextSvgIcon = ({ size = 28, color = '#000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 6h16" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M12 6v12" stroke={color} strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+const PhotoSvgIcon = ({ size = 28, color = '#000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="5" width="18" height="14" rx="2" stroke={color} strokeWidth={2} />
+    <Circle cx="8.5" cy="10" r="1.5" fill={color} />
+    <Path d="M21 16l-5.5-5.5L9 17l-3-3-4 4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const WandSvgIcon = ({ size = 28, color = '#000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 21l10-10" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M14 3l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" fill={color} />
+    <Path d="M18 6l.5 1 .9.5-.9.5-.5 1-.5-1-.9-.5.9-.5.5-1z" fill={color} />
+  </Svg>
+);
+
+const RestoreSvgIcon = ({ size = 28, color = '#000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 5v4l3-3M12 19a7 7 0 1 0-7-7" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const ResetSvgIcon = ({ size = 28, color = '#000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 12a9 9 0 1 0 9-9" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M3 4v5h5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
 
 // Bounds
 const MIN_CONTAINER_WIDTH = 200;
@@ -167,9 +209,18 @@ const DynamicPhotoElement = ({
   const translateY = useSharedValue(y || 0);
 
   // Keep local position in sync when props change (e.g., after programmatic updates)
+  // Use ref to track last applied values to avoid fighting with drag gestures
+  const lastPropsRef = React.useRef({ x: x || 0, y: y || 0 });
   React.useEffect(() => {
-    translateX.value = x || 0;
-    translateY.value = y || 0;
+    const newX = x || 0;
+    const newY = y || 0;
+    // Only sync if props actually changed (not just re-render)
+    if (lastPropsRef.current.x !== newX || lastPropsRef.current.y !== newY) {
+      try { console.log('🖼️[DynamicPhoto]', id, 'props->sync (changed)', { oldX: lastPropsRef.current.x, oldY: lastPropsRef.current.y, newX, newY }); } catch {}
+      translateX.value = newX;
+      translateY.value = newY;
+      lastPropsRef.current = { x: newX, y: newY };
+    }
   }, [x, y]);
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -190,10 +241,24 @@ const DynamicPhotoElement = ({
 
   const panResponder = React.useRef(
     PanResponder.create({
-      // Let taps fall through to onPress handler; only capture when moving
-      onStartShouldSetPanResponder: () => false,
+      // Capture from start to avoid parent gestures stealing touches
+      onStartShouldSetPanResponder: () => {
+        try { console.log('🖼️[DynamicPhoto]', id, 'startShouldSet=true', { x: translateX.value, y: translateY.value }); } catch {}
+        return true;
+      },
+      onStartShouldSetPanResponderCapture: () => {
+        try { console.log('🖼️[DynamicPhoto]', id, 'startCapture=true'); } catch {}
+        return true;
+      },
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+        const should = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+        try { console.log('🖼️[DynamicPhoto]', id, 'moveShouldSet', { dx: gestureState.dx, dy: gestureState.dy, should }); } catch {}
+        return should;
+      },
+      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+        const should = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+        try { console.log('🖼️[DynamicPhoto]', id, 'moveCapture', { dx: gestureState.dx, dy: gestureState.dy, should }); } catch {}
+        return should;
       },
       onPanResponderGrant: () => {
         startX = translateX.value;
@@ -201,6 +266,7 @@ const DynamicPhotoElement = ({
         isDragging = false;
         hasMoved = false;
         gestureStartTime = Date.now();
+        try { console.log('🖼️[DynamicPhoto]', id, 'grant', { startX, startY, containerWidth, containerHeight, size }); } catch {}
       },
       onPanResponderMove: (evt, gestureState) => {
         if (Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2) {
@@ -222,6 +288,7 @@ const DynamicPhotoElement = ({
 
         translateX.value = newX;
         translateY.value = newY;
+        try { console.log('🖼️[DynamicPhoto]', id, 'move', { dx: gestureState.dx, dy: gestureState.dy, newX, newY }); } catch {}
       },
       onPanResponderRelease: (evt, gestureState) => {
         const gestureTime = Date.now() - gestureStartTime;
@@ -242,6 +309,7 @@ const DynamicPhotoElement = ({
 
         if (!(moved || isDragging || hasMoved) && gestureTime < 300) {
           // Quick tap
+          try { console.log('🖼️[DynamicPhoto]', id, 'tap', { gestureTime }); } catch {}
           if (focused) {
             onPress && onPress(id);
           } else {
@@ -249,6 +317,7 @@ const DynamicPhotoElement = ({
           }
         } else {
           // Commit position update to parent state
+          try { console.log('🖼️[DynamicPhoto]', id, 'release->commit', { finalX, finalY }); } catch {}
           onUpdatePosition && onUpdatePosition(id, finalX, finalY);
         }
 
@@ -256,11 +325,14 @@ const DynamicPhotoElement = ({
         hasMoved = false;
         gestureStartTime = 0;
       },
+      onPanResponderTerminationRequest: () => false,
       onPanResponderTerminate: () => {
         isDragging = false;
         hasMoved = false;
         gestureStartTime = 0;
+        try { console.log('🖼️[DynamicPhoto]', id, 'terminate'); } catch {}
       },
+      onShouldBlockNativeResponder: () => true,
     })
   ).current;
 
@@ -370,27 +442,16 @@ const DynamicPhotoElement = ({
       {...panResponder.panHandlers}
     >
       {/* Capture taps to focus or open gallery when focused */}
-      <TouchableOpacity
-        style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, zIndex: 1 }}
-        activeOpacity={0.9}
-        onPress={() => {
-          // Tap behavior: focus first, then open gallery when focused
-          if (focused) {
-            onPress && onPress(id);
-          } else {
-            onFocus && onFocus(id);
-          }
-        }}
-      >
-        <Image
-          source={imageSource}
-          style={[
-            styles.dynamicPhotoImage,
-            { borderRadius: shape === 'circle' ? size / 2 : 8 },
-          ]}
-          resizeMode={resizeMode}
-        />
-      </TouchableOpacity>
+      {/* Render image directly; pan responder handles taps (quick) and drags */}
+      <Image
+        source={imageSource}
+        style={[
+          styles.dynamicPhotoImage,
+          { borderRadius: shape === 'circle' ? size / 2 : 8 },
+        ]}
+        resizeMode={resizeMode}
+        pointerEvents="none"
+      />
 
       {focused && (
         <>
@@ -1529,13 +1590,60 @@ const HeroScreen = ({ route, navigation }) => {
         } catch (e) {
         }
 
+        // Apply saved text container axis if present (position the default/first text)
+        try {
+          const tAxis = doc?.text_container_axis || doc?.textAxis || doc?.text_position || doc?.text_axis;
+          const tRawX = Number(tAxis?.x);
+          const tRawY = Number(tAxis?.y);
+          if (Number.isFinite(tRawX) && Number.isFinite(tRawY)) {
+            const padding = 10;
+            // Use existing first text element size if available, else estimated
+            const first = Array.isArray(textElements) && textElements.length > 0 ? textElements[0] : null;
+            const tWidth = Number(first?.width) || 160;
+            const tHeight = Number(first?.height) || 42;
+            const tMaxX = Math.max(padding, containerWidth - tWidth - padding);
+            const tMaxY = Math.max(padding, containerHeight - tHeight - padding);
+            const tX = Math.max(padding, Math.min(tMaxX, tRawX));
+            const tY = Math.max(padding, Math.min(tMaxY, tRawY));
+
+            // If a default text exists, update it; otherwise create one at the axis
+            setTextElements(prev => {
+              if (Array.isArray(prev) && prev.length > 0) {
+                // Prefer default text if present
+                const idx = prev.findIndex(el => typeof el?.id === 'string' && el.id.startsWith('default-text-'));
+                const target = idx >= 0 ? idx : 0;
+                const copy = prev.slice();
+                copy[target] = { ...copy[target], x: tX, y: tY };
+                return copy;
+              }
+              // Create a minimal default text element at the provided axis
+              const newEl = {
+                id: `default-text-${Date.now()}`,
+                text: 'Your Text',
+                x: tX,
+                y: tY,
+                width: tWidth,
+                height: tHeight,
+                color: COLORS.white,
+                fontWeight: 'bold',
+                textAlign: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.8)'
+              };
+              // Mark as added to avoid duplicate insertion elsewhere
+              try { if (defaultTextAddedRef && defaultTextAddedRef.current !== undefined) defaultTextAddedRef.current = true; } catch {}
+              return [newEl];
+            });
+          }
+        } catch (e) {
+        }
+
         return true;
       }
     } catch (e) {
       console.error('❌ Error in applyDocToTemplate:', e);
     }
     return false;
-  }, [getTemplateUri, setTemplateImage, setReelsTemplates, containerWidth, containerHeight, photo1Size, pan1X, pan1Y]);
+  }, [getTemplateUri, setTemplateImage, setReelsTemplates, containerWidth, containerHeight, photo1Size, pan1X, pan1Y, textElements, setTextElements]);
 
   // const CATEGORY_KEY = 'congratulations'; // replaced by selectedCategory state
 
@@ -2741,6 +2849,7 @@ React.useEffect(() => {
   };
 
   const updatePhotoPosition = (photoId, x, y) => {
+    try { console.log('🧭 updatePhotoPosition', { photoId, x, y }); } catch {}
     setPhotoElements(prev => 
       prev.map(element => 
         element.id === photoId ? { ...element, x, y } : element
@@ -3672,13 +3781,24 @@ React.useEffect(() => {
     const getPhotoSize = () => photoNumber === 1 ? photo1Size : photo2Size;
     
         return PanResponder.create({
-          // Let taps fall through to child onPress; only capture when moving
-          onStartShouldSetPanResponder: (evt, gestureState) => {
-            return false;
+          // Capture from start to avoid parent gestures stealing touches
+          onStartShouldSetPanResponder: () => {
+            try { console.log('🖼️[StaticPhoto] startShouldSet=true', { x: getCurrentX(), y: getCurrentY() }); } catch {}
+            return true;
+          },
+          onStartShouldSetPanResponderCapture: () => {
+            try { console.log('🖼️[StaticPhoto] startCapture=true'); } catch {}
+            return true;
           },
           // Only start dragging if there's actual movement
           onMoveShouldSetPanResponder: (evt, gestureState) => {
             const shouldMove = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+            try { console.log('🖼️[StaticPhoto] moveShouldSet', { dx: gestureState.dx, dy: gestureState.dy, shouldMove }); } catch {}
+            return shouldMove;
+          },
+          onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+            const shouldMove = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+            try { console.log('🖼️[StaticPhoto] moveCapture', { dx: gestureState.dx, dy: gestureState.dy, shouldMove }); } catch {}
             return shouldMove;
           },
       onPanResponderGrant: (evt, gestureState) => {
@@ -3688,6 +3808,7 @@ React.useEffect(() => {
         startX = getCurrentX();
         startY = getCurrentY();
         try { isDraggingRef.current = true; } catch (e) {}
+        try { console.log('🖼️[StaticPhoto] grant', { startX, startY, containerWidth, containerHeight, size: getPhotoSize() }); } catch {}
       },
       onPanResponderMove: (evt, gestureState) => {
         // Mark that we have movement
@@ -3713,10 +3834,7 @@ React.useEffect(() => {
           
           panX.value = newX;
           panY.value = newY;
-          
-          // Log only significant movements to avoid spam
-          if (Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10) {
-          }
+          try { console.log('🖼️[StaticPhoto] move', { dx: gestureState.dx, dy: gestureState.dy, newX, newY }); } catch {}
         }
       },
       onPanResponderRelease: (evt, gestureState) => {
@@ -3725,6 +3843,7 @@ React.useEffect(() => {
         
         
         if (moved || isDragging || hasMoved) {
+          try { console.log('🖼️[StaticPhoto] release (drag end)', { x: panX.value, y: panY.value, gestureTime }); } catch {}
         } else if (gestureTime < 300) { // Quick tap (less than 300ms)
           // For static photo (photo 1), first tap focuses (shows ✕). Next tap opens gallery
           if (photoNumber === 1) {
@@ -3750,6 +3869,7 @@ React.useEffect(() => {
         gestureStartTime = 0;
         try { isDraggingRef.current = false; } catch (e) {}
       },
+      onPanResponderTerminationRequest: () => false,
       
       // Clean up on terminate
       onPanResponderTerminate: (evt, gestureState) => {
@@ -3757,7 +3877,9 @@ React.useEffect(() => {
         hasMoved = false;
         gestureStartTime = 0;
         try { isDraggingRef.current = false; } catch (e) {}
+        try { console.log('🖼️[StaticPhoto] terminate'); } catch {}
       },
+      onShouldBlockNativeResponder: () => true,
     });
   };
 
@@ -3858,94 +3980,87 @@ React.useEffect(() => {
     try { clampPhoto1PositionForSize(photo1Size); } catch (e) {}
   }, [photo1Size, containerWidth, containerHeight]);
 
-const [showAddTemplate, setShowAddTemplate] = useState(false);
-
-  const handleFabPress = React.useCallback(async () => {
-    try {
-      const picked = await ImagePickerService.pickImageFromGallery();
-      if (!picked || !picked.uri) {
-        return;
-      }
-      const category = 'user_uploads';
-      const ratio = '9:16';
-
-      // Capture current axes
-      const photoAxis = {
-        x: Math.round((pan1X && typeof pan1X.value === 'number') ? pan1X.value : 0),
-        y: Math.round((pan1Y && typeof pan1Y.value === 'number') ? pan1Y.value : 0),
-      };
-      const firstText = Array.isArray(textElements) && textElements.length > 0 ? textElements[0] : null;
-      const textAxis = firstText ? { x: Math.round(firstText.x || 0), y: Math.round(firstText.y || 0) } : null;
-
-
-      const result = await dispatch(uploadTemplate({
-        imageUri: picked.uri,
-        category,
-        templateData: {
-          name: `User Upload ${Date.now()}`,
-          description: 'Uploaded from FAB',
-          ratio,
-          ...(photoAxis ? { photo_container_axis: photoAxis } : {}),
-          ...(textAxis ? { text_container_axis: textAxis } : {}),
-        }
-      })).unwrap();
-
-      const template = result?.template || {};
-const imageUrl = template.image_url || template.secure_url || template.url || null;
-      if (imageUrl) {
-        const defaults = computeDefaultPositions();
-        const photo_cont_pos = (photoAxis && Number.isFinite(photoAxis.x) && Number.isFinite(photoAxis.y)) ? photoAxis : defaults.photo_cont_pos;
-        const text_cont_pos = (textAxis && Number.isFinite(textAxis.x) && Number.isFinite(textAxis.y)) ? textAxis : defaults.text_cont_pos;
-        await ImageMetadataService.saveImageMetadata({
-          image_url: imageUrl,
-          category,
-          photo_cont_pos,
-          text_cont_pos,
-        });
-        setTemplateImage({ uri: imageUrl });
-      } else {
-      }
-    } catch (e) {
-      Alert.alert('Upload Failed', e?.message || 'Could not upload image.');
-    }
-  }, [dispatch, textElements, pan1X, pan1Y]);
 
   return (
     <>
-    <TouchableWithoutFeedback onPress={handleBackgroundPress}>
       <View style={{ flex: 1 }}>
         
-        {/* Profile photo component */}
-        <TouchableOpacity
-          onPress={async () => {
-            try {
-              const token = await AsyncStorage.getItem('AUTH_TOKEN');
-              if (!token) {
+        {/* Top row: Category tabs (left) and Profile photo (right) */}
+        <View style={styles.topBarRow}>
+          {/* Category tabs (wrap to multiple lines) */}
+          <View style={styles.categoryTabsWrap}>
+            {(categories || []).filter(cat => String(cat.key).toLowerCase() !== 'liked').map((cat) => (
+              <TouchableOpacity
+                key={cat.key}
+                style={[
+                  styles.categoryTab,
+                  selectedCategory === cat.key && styles.categoryTabActive
+                ]}
+                onPress={() => {
+                  try { lastUserSelectionRef.current = Date.now(); } catch {}
+                  try { hasLoaded.current = true; } catch {}
+                  setSelectedCategory(cat.key);
+                  try { dispatch(setGlobalSub(cat.key)); } catch {}
+                  try { setAppliedAxisForUri(null); } catch {}
+                  setTimeout(() => {
+                    try {
+                      TemplatePreferences.setSubcategory(cat.key);
+                      dispatch(saveMainSubToStorage());
+                    } catch {}
+                  }, 50);
+                  setTimeout(() => {
+                    try {
+                      refreshForSelection(globalReligion || 'all', cat.key);
+                    } catch {}
+                  }, 200);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.categoryTabText,
+                    selectedCategory === cat.key && styles.categoryTabTextActive
+                  ]}
+                  numberOfLines={1}
+                >
+                  {cat.icon ? `${cat.icon} ` : ''}{cat.label || cat.key}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Profile photo */}
+          <TouchableOpacity
+            onPress={async () => {
+              try {
+                const token = await AsyncStorage.getItem('AUTH_TOKEN');
+                if (!token) {
+                  navigation.navigate('ProfileEntry');
+                  return;
+                }
+              } catch (e) {
                 navigation.navigate('ProfileEntry');
                 return;
               }
-            } catch (e) {
-              navigation.navigate('ProfileEntry');
-              return;
-            }
-            navigation.navigate('ProfileScreen');
-          }}
-          style={styles.profilePhotoContainerUnderHeader}
-          activeOpacity={0.8}
-        >
-          <Image
-            source={(() => {
-              try {
-                if (profilePictureUri && !isDefaultPicture) {
-                  return { uri: profilePictureUri };
-                }
-              } catch {}
-              return getDefaultProfileImage();
-            })()}
-            style={styles.profilePhotoUnderHeader}
-            resizeMode="cover"
-          />
-        </TouchableOpacity>
+              navigation.navigate('ProfileScreen');
+            }}
+            style={styles.profilePhotoContainerUnderHeader}
+            activeOpacity={0.8}
+          >
+            <Image
+              source={(() => {
+                try {
+                  if (profilePictureUri && !isDefaultPicture) {
+                    return { uri: profilePictureUri };
+                  }
+                } catch {}
+                return getDefaultProfileImage();
+              })()}
+              style={styles.profilePhotoUnderHeader}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+        </View>
 
 
         {/* TEMPORARY: Debug component for testing button toggle */}
@@ -4138,6 +4253,7 @@ onHandlerStateChange={({ nativeEvent }) => {
                     }}
           >
             <ViewShot ref={viewShotRef} options={{ format: 'jpg', quality: 1.0 }} style={[styles.viewShotContainer, { width: containerWidth, height: containerHeight }]}>
+              <TouchableWithoutFeedback onPress={handleBackgroundPress}>
               <View style={[styles.imageContainerWrapper, { width: containerWidth, height: containerHeight }]} collapsable={false}>
                 {/* Template reels area - FlatList for vertical scrolling */}
                     <View style={[
@@ -4431,26 +4547,8 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
             )}
 
             {/* Tap overlay to handle focus on first tap and open gallery on second tap */}
-            <TouchableOpacity
-              style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, zIndex: 1 }}
-              activeOpacity={0.9}
-              onPress={() => {
-                if (!isPhoto1Focused) {
-                  setIsPhoto1Focused(true);
-                } else {
-                  try {
-                    handlePhotoContainerPress(1);
-                  } catch (e) {
-                  }
-                }
-              }}
-              accessibilityLabel="Static photo container"
-            />
-            {/* Removed all softBlur layers to eliminate shadows completely */}
-            
-            {/* Create shared image styles to ensure identical rendering */}
+            {/* Image content - allow parent pan responder to handle taps and drags */}
             {(() => {
-              // Robust URI-to-source resolution to prevent casting errors
               const toSource = (u) => {
                 try {
                   if (!u || u === 'default_profile_image') return getDefaultProfileImage();
@@ -4465,16 +4563,15 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
               const isBgRemoved = (typeof photo1Uri === 'string' && photo1Uri.includes('bg_removed')) ||
                                   (photo1Uri && typeof photo1Uri === 'object' && typeof photo1Uri.uri === 'string' && photo1Uri.uri.includes('bg_removed'));
               const resizeMode = isBgRemoved ? 'contain' : 'cover';
-              
+
               const sharedImageStyle = [
                 styles.photoImage,
                 {
                   borderRadius: shape === 'circle' ? photo1Size / 2 : 8,
-                  // Ensure no background interference
                   backgroundColor: 'transparent',
                 },
               ];
-              
+
               return (
                 <View style={[styles.photoImageMask, { borderRadius: shape === 'circle' ? photo1Size / 2 : 8 }]}
                 >
@@ -4483,10 +4580,6 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     source={imageSource}
                     style={sharedImageStyle}
                     resizeMode={resizeMode}
-                    onLoad={() => {
-                    }}
-                    onError={(error) => {
-                    }}
                     pointerEvents="none"
                   />
                 </View>
@@ -4577,6 +4670,7 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
             })}
           </View>
           </View>
+          </TouchableWithoutFeedback>
         </ViewShot>
           </FlingGestureHandler>
         </FlingGestureHandler>
@@ -4619,59 +4713,21 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     disabled={isRemovingBackground || !removeBgEnabled}
                   >
                     <View style={styles.menuIconCircle}>
-                      <Text style={[
-                        styles.menuIconGlyph,
-                        (isRemovingBackground || !removeBgEnabled) && styles.removeBgButtonIconDisabled,
-                        styles.menuIconShrink,
-                        styles.menuIconText
-                      ]}>
-                        {isRemovingBackground ? '🔄' : 
-                        (!removeBgEnabled ? '🚫' : '🎭')}
-                      </Text>
+                      {isRemovingBackground ? (
+                        <ResetSvgIcon color="#999" size={22} />
+                      ) : (
+                        <WandSvgIcon color={(isRemovingBackground || !removeBgEnabled) ? '#999' : '#000'} size={22} />
+                      )}
                     </View>
                     <Text style={[
                       styles.menuLabelText,
                       (isRemovingBackground || !removeBgEnabled) && styles.removeBgButtonTextDisabled
                     ]} numberOfLines={2}>
                       {isRemovingBackground ? 'Removing...' : 
-                      (!removeBgEnabled ? 'Remove BG' : 'Remove BG')}
+                      (!removeBgEnabled ? 'Rem BG' : 'Rem BG')}
                     </Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    style={[
-                      styles.withBgButton,
-                      !restoreBgEnabled && styles.withBgButtonDisabled
-                    ]}
-                    onPress={() => {
-                      
-                      // Also check service state
-                      const serviceState = BackgroundToggleService.getCurrentState();
-                      
-                      if (restoreBgEnabled) {
-                        handleRestoreBackground();
-                      } else {
-                      }
-                    }}
-                    disabled={!restoreBgEnabled}
-                  >
-                    <View style={styles.menuIconCircle}>
-                      <Text style={[
-                        styles.menuIconGlyph,
-                        !restoreBgEnabled && styles.withBgButtonIconDisabled,
-                        styles.menuIconShrink,
-                        styles.menuIconText
-                      ]}>
-                        {restoreBgEnabled ? '🌅' : '🚫'}
-                      </Text>
-                    </View>
-                    <Text style={[
-                      styles.menuLabelText,
-                      !restoreBgEnabled && styles.withBgButtonTextDisabled
-                    ]} numberOfLines={2}>
-                      {restoreBgEnabled ? 'Restore BG' : 'Restore BG'}
-                    </Text>
-                  </TouchableOpacity>
 
                   {/* Banner button: open dialog to create/use/remove banners */}
                   <TouchableOpacity 
@@ -4685,9 +4741,9 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     delayPressIn={0}
                   >
                     <View style={styles.menuIconCircle}>
-                      <Text style={[styles.menuIconGlyph, styles.menuIconShrink, styles.menuIconText]}>🏷️</Text>
+                      <BannerSvgIcon color="#000" size={22} />
                     </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Add Banner</Text>
+                    <Text style={styles.menuLabelText} numberOfLines={2}>Banner</Text>
                   </TouchableOpacity>
 
                   {/* Text / Photo / Reset */}
@@ -4701,9 +4757,9 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     }}
                   >
                     <View style={styles.menuIconCircle}>
-                      <Text style={[styles.menuIconGlyph, styles.menuIconShrink, styles.menuIconText]}>📝</Text>
+                      <TextSvgIcon color="#000" size={22} />
                     </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Add Text</Text>
+                    <Text style={styles.menuLabelText} numberOfLines={2}>Text</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
@@ -4716,55 +4772,11 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     }}
                   >
                     <View style={styles.menuIconCircle}>
-                      <Text style={[styles.menuIconGlyph, styles.menuIconShrink, styles.menuIconText]}>📷</Text>
+                      <PhotoSvgIcon color="#000" size={22} />
                     </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Add Photo</Text>
+                    <Text style={styles.menuLabelText} numberOfLines={2}>Photo</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    style={styles.resetButton}
-                    onPress={() => {
-
-                      // Clear existing content
-                      dispatchPhotoState({ type: 'CLEAR_PHOTO_1' });
-                      setIsPhoto1Visible(true);
-                      setIsPhoto1Focused(false);
-                      setTextElements([]);
-                      setPhotoElements([]);
-                      setFocusedPhotoId(null);
-                      clearAllCachedImages();
-                      setOriginalPhoto1Uri(null);
-                      setOriginalPhoto2Uri(null);
-
-                      // Reset button states via service
-                      const resetResult = BackgroundToggleService.reset();
-
-                      // Explicitly restore profile picture into the first photo container
-                      try {
-                        let newUri = null;
-                        if (profilePictureUri) {
-                          newUri = typeof profilePictureUri === 'string' ? profilePictureUri : profilePictureUri.uri;
-                        } else if (profileImageProcessed) {
-                          newUri = typeof profileImageProcessed === 'string' ? profileImageProcessed : profileImageProcessed.uri;
-                        } else {
-                          newUri = 'default_profile_image';
-                        }
-
-                        dispatchPhotoState({ type: 'SET_PHOTO_1', uri: newUri });
-
-                        // Update last crop target to static container for future crops
-                        try {
-                          lastCropTargetRef.current = { photoId: STATIC_PHOTO_ID, photoNumber: 1, isDynamicPhoto: false };
-                        } catch (e) { /* no-op */ }
-                      } catch (e) {
-                      }
-                    }}
-                  >
-                    <View style={styles.menuIconCircle}>
-                      <Text style={[styles.menuIconGlyph, styles.menuIconShrink, styles.menuIconText]}>🔄</Text>
-                    </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Reset</Text>
-                  </TouchableOpacity>
                 </View>
               )}
             />
@@ -4773,7 +4785,6 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
 
 
       </View>
-    </TouchableWithoutFeedback>
 
     {isHeroLoading && (
       <View style={styles.processingOverlay}>
@@ -4784,112 +4795,6 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
       </View>
     )}
 
-    {!isKeyboardVisible && (
-    <View pointerEvents="box-none" style={styles.fabOverlay}>
-      {/* FAB row (category + upload) */}
-      <View style={styles.fabRowContainer} pointerEvents="box-none">
-        {/* Upload FAB (inline, non-absolute) */}
-        <TouchableOpacity
-          style={styles.uploadFabInline}
-          onPress={() => setShowAddTemplate(true)}
-          activeOpacity={0.85}
-          accessibilityLabel="Upload image/template"
-          testID="fab-add-template"
-        >
-          <Text style={styles.uploadFabText}>＋</Text>
-        </TouchableOpacity>
-
-        {/* Category Filter FAB */}
-        <TouchableOpacity
-          style={styles.filterFabInline}
-          onPress={() => setShowCategoryFilter(true)}
-          activeOpacity={0.85}
-          accessibilityLabel="Open category filter"
-        >
-          <Text style={styles.filterFabText}>🗂️</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Category Filter Modal */}
-      {showCategoryFilter && (
-        <Modal
-          visible={showCategoryFilter}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowCategoryFilter(false)}
-        >
-          <TouchableWithoutFeedback onPress={() => setShowCategoryFilter(false)}>
-            <View style={styles.filterOverlay}>
-              <TouchableWithoutFeedback>
-                <View style={styles.filterCard}>
-                  <Text style={styles.filterTitle}>Select Category</Text>
-                  <FlatList
-                    style={{ maxHeight: 300 }}
-                    data={(categories || [])}
-                    keyExtractor={(cat) => cat.key}
-                    renderItem={({ item: cat }) => (
-                      <TouchableOpacity
-                        style={[styles.filterItem, selectedCategory === cat.key && styles.filterItemSelected]}
-                        onPress={() => {
-                          
-                          // Track user selection timing to prevent interference
-                          lastUserSelectionRef.current = Date.now();
-                          
-                          setShowCategoryFilter(false);
-                          
-                          // Prevent other effects from overriding this selection
-                          hasLoaded.current = true;
-                          
-                          // Update local state first
-                          setSelectedCategory(cat.key);
-                          
-                          // Update global state
-                          dispatch(setGlobalSub(cat.key));
-                          
-                          // Clear applied axis for new category
-                          setAppliedAxisForUri(null);
-                          
-                          // Immediately save to preferences to prevent override
-                          setTimeout(() => {
-                            try {
-                              TemplatePreferences.setSubcategory(cat.key);
-                              dispatch(saveMainSubToStorage()); 
-                            } catch (err) {
-                            }
-                          }, 50);
-                          
-                          // Proactively refresh for immediate feedback  
-                          setTimeout(() => {
-                            try { 
-                              refreshForSelection(globalReligion || 'all', cat.key); 
-                            } catch (err) {
-                            }
-                          }, 200); // Small delay to ensure state updates
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.filterItemText}>{cat.icon ? `${cat.icon} ` : ''}{cat.label || cat.key}</Text>
-                        {selectedCategory === cat.key && <Text style={styles.filterCheck}>✓</Text>}
-                      </TouchableOpacity>
-                    )}
-                  />
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </Modal>
-      )}
-
-      {showAddTemplate && (
-        <AddTemplateModal
-          visible={showAddTemplate}
-          onClose={() => setShowAddTemplate(false)}
-          onSelectCategory={(categoryKey) => {
-          }}
-        />
-      )}
-    </View>
-    )}
 
     {/* Custom Alert */}
     <CustomAlert
@@ -4921,6 +4826,42 @@ const styles = StyleSheet.create({
   profilePhotoUnderHeader: {
     width: '100%',
     height: '100%',
+  },
+  topBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  categoryTabsContainer: {
+    paddingRight: 12,
+  },
+  categoryTabsWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginRight: 8,
+  },
+  categoryTab: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: '#f2f2f2',
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  categoryTabActive: {
+    backgroundColor: '#4C1D95',
+  },
+  categoryTabText: {
+    color: '#333',
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  categoryTabTextActive: {
+    color: '#fff',
   },
   processingOverlay: {
     position: 'absolute',
@@ -4981,15 +4922,15 @@ const styles = StyleSheet.create({
     pointerEvents: 'box-none', // Allow touches to pass through to underlying elements when not touching text
   },
   menuBar: {
-    height: MENU_BAR_HEIGHT,
     backgroundColor: '#FFFFFF',
     paddingVertical: 8,
     paddingBottom: 8,
-    marginTop: 8,
-    marginBottom: 24,
     zIndex: 300,
-    elevation: 0,
-    position: 'relative',
+    elevation: 8,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   menuScrollView: {
     flex: 1,
@@ -5008,27 +4949,27 @@ const styles = StyleSheet.create({
   },
   menuRowContent: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: 12,
     columnGap: 0,
     backgroundColor: 'transparent',
   },
   menuIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 0,
+    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    overflow: 'hidden',
-    marginBottom: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: 'transparent',
+    overflow: 'visible',
+    marginBottom: 2,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   menuIconShrink: {
     transform: [{ scale: 0.9 }],
@@ -5041,11 +4982,12 @@ const styles = StyleSheet.create({
   menuLabelText: {
     color: '#000000',
     fontWeight: 'bold',
-    fontSize: 12.75,
+    fontSize: 12,
     textAlign: 'center',
     flexWrap: 'wrap',
-    lineHeight: 12.75,
-    minHeight: 26,
+    lineHeight: 12,
+    minHeight: 20,
+    marginTop: 0,
     width: '100%',
   },
   menuIconGlyph: {
@@ -5064,13 +5006,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: 'transparent',
     marginHorizontal: 6,
-    minWidth: 91,
-    width: 91,
+    minWidth: 80,
+    width: 80,
   },
   saveButton: {
     paddingHorizontal: 16,
@@ -5118,13 +5060,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: 'transparent',
     marginHorizontal: 6,
-    minWidth: 91,
-    width: 91,
+    minWidth: 80,
+    width: 80,
   },
   removeBgButtonIconDisabled: {
     opacity: 0.5,
@@ -5189,11 +5131,11 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: CONTAINER_PADDING,
     paddingTop: 20,
-    paddingBottom: 8,
+    paddingBottom: MENU_BAR_HEIGHT + 8,
     backgroundColor: '#ffffff',
   },
   imageContainerWrapper: {
@@ -5832,13 +5774,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: 'transparent',
     marginHorizontal: 6,
-    minWidth: 91,
-    width: 91,
+    minWidth: 80,
+    width: 80,
   },
   
   // Banner toggle button styles
@@ -5846,13 +5788,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: 'transparent',
     marginHorizontal: 6,
-    minWidth: 91,
-    width: 91,
+    minWidth: 80,
+    width: 80,
   },
   bannerButtonActive: {
     opacity: 1,
