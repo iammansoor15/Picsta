@@ -65,7 +65,7 @@ import { selectReligion as selectGlobalReligion, selectSubcategory as selectGlob
 import TemplateService from '../services/TemplateService';
 import AppConfig from '../config/AppConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import VideoCompositeService from '../services/VideoCompositeService';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const MENU_BAR_HEIGHT = 113; // +15% from 98
@@ -1542,15 +1542,19 @@ const HeroScreen = ({ route, navigation }) => {
             const maxY = Math.max(padding, containerHeight - photo1Size - padding);
             const clampedX = Math.max(padding, Math.min(maxX, rawX));
             const clampedY = Math.max(padding, Math.min(maxY, rawY));
+            
             // Only apply axis if user hasn't manually moved the static photo yet
             if (!hasUserMovedStaticPhotoRef.current) {
               try {
                 if (pan1X && typeof pan1X.value !== 'undefined') pan1X.value = clampedX;
                 if (pan1Y && typeof pan1Y.value !== 'undefined') pan1Y.value = clampedY;
-              } catch (e) {}
+              } catch (e) {
+                console.error('❌ Error setting photo position:', e);
+              }
             }
           }
         } catch (e) {
+          console.error('❌ Error processing photo position:', e);
         }
 
         // Apply saved text container axis if present (position the default/first text)
@@ -1569,10 +1573,10 @@ const HeroScreen = ({ route, navigation }) => {
             const tX = Math.max(padding, Math.min(tMaxX, tRawX));
             const tY = Math.max(padding, Math.min(tMaxY, tRawY));
 
-            // If a default text exists, update it; otherwise create one at the axis
+            // Update existing text or create new one at backend position
             setTextElements(prev => {
-              // Only create a default text on first load; do NOT override existing positions
               if (!Array.isArray(prev) || prev.length === 0) {
+                // No text exists - create default at backend position
                 const newEl = {
                   id: `default-text-${Date.now()}`,
                   text: 'Your Text',
@@ -1587,11 +1591,22 @@ const HeroScreen = ({ route, navigation }) => {
                 };
                 try { if (defaultTextAddedRef && defaultTextAddedRef.current !== undefined) defaultTextAddedRef.current = true; } catch {}
                 return [newEl];
+              } else {
+                // Text exists - update FIRST text element to backend position
+                // BUT only if user hasn't manually moved it
+                const firstId = prev[0].id;
+                const userMoved = movedTextIdsRef?.current?.has(firstId);
+                if (userMoved) {
+                  return prev;
+                }
+                return prev.map((el, idx) => 
+                  idx === 0 ? { ...el, x: tX, y: tY, width: tWidth, height: tHeight } : el
+                );
               }
-              return prev;
             });
           }
         } catch (e) {
+          console.error('❌ Error applying text position:', e);
         }
 
         return true;
@@ -2953,59 +2968,67 @@ React.useEffect(() => {
         templateSerial: currentTemplate?.serial_no
       });
       
-      // If it's a video, download and save directly to gallery
+      // If it's a video, composite overlays with FFmpeg then save
       if (isVideo && videoUrl) {
         try {
-          console.log('🎥 Downloading video for saving...');
-          const RNFS = require('react-native-fs');
-          
-          const timestamp = Date.now();
-          const downloadPath = `${RNFS.CachesDirectoryPath}/narayana_video_${timestamp}.mp4`;
-          
-          console.log('📥 Downloading from:', videoUrl?.substring(0, 60));
-          
-          // Download video from Cloudinary
-          const downloadResult = await RNFS.downloadFile({
-            fromUrl: videoUrl,
-            toFile: downloadPath,
-          }).promise;
-          
-          if (downloadResult.statusCode !== 200) {
-            throw new Error(`Download failed with status: ${downloadResult.statusCode}`);
+          // Build overlays from current state
+          const photos = [];
+          // Static photo 1
+          if (photo1Uri && photo1Uri !== 'default_profile_image') {
+            const x = Math.round(typeof pan1X?.value === 'number' ? pan1X.value : 0);
+            const y = Math.round(typeof pan1Y?.value === 'number' ? pan1Y.value : 0);
+            photos.push({ uri: photo1Uri, x, y, width: Math.round(photo1Size), height: Math.round(photo1Size) });
           }
-          
-          console.log('✅ Video downloaded to:', downloadPath);
-          
-          // Verify file exists
-          const fileExists = await RNFS.exists(downloadPath);
-          if (!fileExists) {
-            throw new Error('Downloaded video file not found');
+          // Dynamic photos
+          if (Array.isArray(photoElements) && photoElements.length > 0) {
+            photoElements.forEach(el => {
+              const uri = el?.uri;
+              if (!uri || uri === 'default_profile_image') return;
+              photos.push({ uri, x: Math.round(el.x || 0), y: Math.round(el.y || 0), width: Math.round(el.size || 0), height: Math.round(el.size || 0) });
+            });
           }
-          
-          // Save to gallery
-          const savedUri = await CameraRoll.save(downloadPath, {
-            type: 'video',
-            album: 'Narayana Templates'
-          });
-          
-          console.log('✅ Video saved to gallery:', savedUri);
-          
-          try { setSavedTemplateUri(savedUri); } catch (e) {}
-          
-          Alert.alert(
-            'Success! 🎥',
-            'Your video template has been saved to the Narayana Templates album.',
-            [{ text: 'Great!' }]
-          );
-          
-          // Cleanup temporary file
-          try {
-            await RNFS.unlink(downloadPath);
-          } catch (e) {
-            console.warn('Failed to cleanup temp video:', e);
+
+          // Text overlays
+          const texts = Array.isArray(textElements) ? textElements.map(t => ({
+            text: String(t.text || ''),
+            x: Math.round(t.x || 0),
+            y: Math.round(t.y || 0),
+            fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.8))),
+            color: t.color || '#FFFFFF'
+          })) : [];
+
+          const effectiveBannerUri = bannerEnabled && bannerUri ? bannerUri : null;
+
+          const hasOverlays = (photos && photos.length) || (texts && texts.length) || !!effectiveBannerUri;
+
+          if (hasOverlays) {
+            console.log('🎬 Compositing video with overlays before saving...', { photos: photos.length, texts: texts.length, hasBanner: !!effectiveBannerUri });
+            const compositedPath = await VideoCompositeService.compositeVideo({
+              videoUrl,
+              photos,
+              texts,
+              bannerUri: effectiveBannerUri,
+              containerWidth: Math.round(containerWidth),
+              containerHeight: Math.round(containerHeight),
+            });
+
+            const savedUri = await CameraRoll.save(compositedPath, { type: 'video', album: 'Narayana Templates' });
+            try { setSavedTemplateUri(savedUri); } catch (e) {}
+            Alert.alert('Success! 🎥', 'Your edited video has been saved to the Narayana Templates album.', [{ text: 'Great!' }]);
+            return savedUri;
+          } else {
+            // No overlays → fallback to saving original video
+            console.log('ℹ️ No overlays detected, saving original video.');
+            const RNFS = require('react-native-fs');
+            const timestamp = Date.now();
+            const downloadPath = `${RNFS.CachesDirectoryPath}/narayana_video_${timestamp}.mp4`;
+            const downloadResult = await RNFS.downloadFile({ fromUrl: videoUrl, toFile: downloadPath }).promise;
+            if (downloadResult.statusCode !== 200) throw new Error(`Download failed with status: ${downloadResult.statusCode}`);
+            const savedUri = await CameraRoll.save(downloadPath, { type: 'video', album: 'Narayana Templates' });
+            try { setSavedTemplateUri(savedUri); } catch {}
+            return savedUri;
           }
-          
-          return savedUri;
+
         } catch (videoError) {
           console.error('❌ Video save failed:', videoError);
           throw new Error(`Failed to save video: ${videoError.message}`);
@@ -3118,51 +3141,65 @@ React.useEffect(() => {
         return null;
       }
       
-      // If it's a video, download and share the template video
+      // If it's a video, composite overlays with FFmpeg then share
       if (isVideo && videoUrl) {
         try {
-          console.log('🎥 Downloading video for sharing...');
-          
-          const RNFS = require('react-native-fs');
-          const timestamp = Date.now();
-          const filename = `narayana_video_${timestamp}.mp4`;
-          const downloadPath = `${RNFS.CachesDirectoryPath}/${filename}`;
-          
-          // Download video
-          const downloadResult = await RNFS.downloadFile({
-            fromUrl: videoUrl,
-            toFile: downloadPath,
-          }).promise;
-          
-          if (downloadResult.statusCode !== 200) {
-            throw new Error(`Download failed: ${downloadResult.statusCode}`);
+          // Build overlays
+          const photos = [];
+          if (photo1Uri && photo1Uri !== 'default_profile_image') {
+            const x = Math.round(typeof pan1X?.value === 'number' ? pan1X.value : 0);
+            const y = Math.round(typeof pan1Y?.value === 'number' ? pan1Y.value : 0);
+            photos.push({ uri: photo1Uri, x, y, width: Math.round(photo1Size), height: Math.round(photo1Size) });
           }
-          
-          console.log('✅ Video downloaded for sharing:', downloadPath);
-          
-          // Share the video
-          const fileUrl = downloadPath.startsWith('file://') ? downloadPath : `file://${downloadPath}`;
+          if (Array.isArray(photoElements) && photoElements.length > 0) {
+            photoElements.forEach(el => {
+              const uri = el?.uri;
+              if (!uri || uri === 'default_profile_image') return;
+              photos.push({ uri, x: Math.round(el.x || 0), y: Math.round(el.y || 0), width: Math.round(el.size || 0), height: Math.round(el.size || 0) });
+            });
+          }
+          const texts = Array.isArray(textElements) ? textElements.map(t => ({
+            text: String(t.text || ''),
+            x: Math.round(t.x || 0),
+            y: Math.round(t.y || 0),
+            fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.8))),
+            color: t.color || '#FFFFFF'
+          })) : [];
+          const effectiveBannerUri = bannerEnabled && bannerUri ? bannerUri : null;
+          const hasOverlays = (photos && photos.length) || (texts && texts.length) || !!effectiveBannerUri;
+
+          let sharePath;
+          if (hasOverlays) {
+            console.log('🎬 Compositing video with overlays before sharing...', { photos: photos.length, texts: texts.length, hasBanner: !!effectiveBannerUri });
+            sharePath = await VideoCompositeService.compositeVideo({
+              videoUrl,
+              photos,
+              texts,
+              bannerUri: effectiveBannerUri,
+              containerWidth: Math.round(containerWidth),
+              containerHeight: Math.round(containerHeight),
+            });
+          } else {
+            // Fallback to original video
+            const RNFS = require('react-native-fs');
+            const timestamp = Date.now();
+            const filename = `narayana_video_${timestamp}.mp4`;
+            sharePath = `${RNFS.CachesDirectoryPath}/${filename}`;
+            const downloadResult = await RNFS.downloadFile({ fromUrl: videoUrl, toFile: sharePath }).promise;
+            if (downloadResult.statusCode !== 200) throw new Error(`Download failed: ${downloadResult.statusCode}`);
+          }
+
+          const fileUrl = sharePath.startsWith('file://') ? sharePath : `file://${sharePath}`;
           await RNShare.open({
             url: fileUrl,
             type: 'video/mp4',
-            filename: filename,
+            filename: 'narayana_template.mp4',
             failOnCancel: false,
             showAppsToView: true,
             title: 'Share Video Template'
           });
-          
-          console.log('✅ Video share dialog opened');
-          
-          // Clean up temp file after sharing
-          setTimeout(async () => {
-            try {
-              await RNFS.unlink(downloadPath);
-              console.log('✅ Cleaned up temp video');
-            } catch (e) {}
-          }, 5000);
-          
           return fileUrl;
-          
+
         } catch (videoError) {
           console.error('❌ Video share failed:', videoError);
           throw new Error(`Failed to share video: ${videoError.message}`);

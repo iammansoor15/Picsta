@@ -5,7 +5,14 @@ import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gest
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Minimal, professional positioning UI for the photo container
-const TemplatePositioner = ({ imageUri, onCancel, onConfirm, isUploading = false }) => {
+const TemplatePositioner = ({ 
+  imageUri, 
+  onCancel, 
+  onConfirm, 
+  isUploading = false,
+  initialPhotoAxis = null, // { x, y } from backend JSON
+  initialTextAxis = null,  // { x, y } from backend JSON
+}) => {
   // Canvas sizing
   const MAX_WIDTH = Math.min(screenWidth * 0.92, 420);
   const MAX_HEIGHT = Math.min(screenHeight * 0.7, 640);
@@ -19,8 +26,10 @@ const TemplatePositioner = ({ imageUri, onCancel, onConfirm, isUploading = false
   const initialContainerSize = Math.max(80, Math.min(160, Math.floor(96 * scalingFactor + canvasWidth * 0.12)));
   const [containerSize, setContainerSize] = useState(initialContainerSize);
   const containerSizeRef = useRef(initialContainerSize);
-  const defaultX = canvasWidth - containerSize - 12;
-  const defaultY = canvasHeight - containerSize - 12;
+  
+  // Use backend position if provided, otherwise default to bottom-right
+  const defaultX = initialPhotoAxis?.x ?? (canvasWidth - containerSize - 12);
+  const defaultY = initialPhotoAxis?.y ?? (canvasHeight - containerSize - 12);
 
   // Animated position for smooth drag without re-renders (photo)
   const translate = useRef(new Animated.ValueXY({ x: defaultX, y: defaultY })).current;
@@ -34,12 +43,37 @@ const TemplatePositioner = ({ imageUri, onCancel, onConfirm, isUploading = false
   const [textWidth, setTextWidth] = useState(initialTextWidth);
   const [textHeight, setTextHeight] = useState(initialTextHeight);
   const textSizeRef = useRef({ width: initialTextWidth, height: initialTextHeight });
-  const defaultTextX = 12;
-  const defaultTextY = Math.max(12, Math.floor(canvasHeight * 0.1));
+  
+  // Use backend position if provided, otherwise default to top-left
+  const defaultTextX = initialTextAxis?.x ?? 12;
+  const defaultTextY = initialTextAxis?.y ?? Math.max(12, Math.floor(canvasHeight * 0.1));
   const translateText = useRef(new Animated.ValueXY({ x: defaultTextX, y: defaultTextY })).current;
   const posTextRef = useRef({ x: defaultTextX, y: defaultTextY });
   const [textAxis, setTextAxis] = useState({ x: Math.round(defaultTextX), y: Math.round(defaultTextY) });
   const rafTextRef = useRef(null);
+  
+  // Apply backend positions when they change
+  React.useEffect(() => {
+    if (initialPhotoAxis?.x != null && initialPhotoAxis?.y != null) {
+      const x = Math.max(0, Math.min(canvasWidth - containerSize, initialPhotoAxis.x));
+      const y = Math.max(0, Math.min(canvasHeight - containerSize, initialPhotoAxis.y));
+      translate.setValue({ x, y });
+      posRef.current = { x, y };
+      setAxis({ x: Math.round(x), y: Math.round(y) });
+      console.log('📍 Applied backend photo position:', { x, y });
+    }
+  }, [initialPhotoAxis, canvasWidth, canvasHeight, containerSize]);
+  
+  React.useEffect(() => {
+    if (initialTextAxis?.x != null && initialTextAxis?.y != null) {
+      const x = Math.max(0, Math.min(canvasWidth - textWidth, initialTextAxis.x));
+      const y = Math.max(0, Math.min(canvasHeight - textHeight, initialTextAxis.y));
+      translateText.setValue({ x, y });
+      posTextRef.current = { x, y };
+      setTextAxis({ x: Math.round(x), y: Math.round(y) });
+      console.log('📍 Applied backend text position:', { x, y });
+    }
+  }, [initialTextAxis, canvasWidth, canvasHeight, textWidth, textHeight]);
 
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
