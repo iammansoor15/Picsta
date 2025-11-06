@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Dimensions, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Dimensions, ActivityIndicator, Modal } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -8,6 +8,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import ViewShot from 'react-native-view-shot';
+import backgroundRemovalService from '../services/BackgroundRemovalService';
 // Import theme with fallbacks
 let COLORS, TYPOGRAPHY, SPACING;
 try {
@@ -92,6 +93,9 @@ const Crop = ({ route, navigation }) => {
   const [error, setError] = useState(null);
   const [showCircle, setShowCircle] = useState(initialShape === 'circle' || true);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [removeBackground, setRemoveBackground] = useState(false);
+  const [isProcessingBg, setIsProcessingBg] = useState(false);
+  const [bgRemovalStatus, setBgRemovalStatus] = useState('');
 
 
   // Pinch gesture for zooming
@@ -164,7 +168,7 @@ const Crop = ({ route, navigation }) => {
     try {
       setIsLoading(true);
       setError(null);
-      console.log('Starting image capture...', { photoNumber, showCircle });
+      console.log('Starting image capture...', { photoNumber, showCircle, removeBackground });
       
       if (!viewShotRef.current) {
         throw new Error('View reference is not available');
@@ -176,8 +180,42 @@ const Crop = ({ route, navigation }) => {
         result: 'tmpfile'
       };
       
-      const capturedUri = await viewShotRef.current.capture(captureOptions);
+      let capturedUri = await viewShotRef.current.capture(captureOptions);
       console.log('Image captured successfully:', capturedUri);
+
+      // If background removal is requested, process it now
+      if (removeBackground) {
+        setIsProcessingBg(true);
+        setBgRemovalStatus('Removing background...');
+        
+        try {
+          const bgRemovalResult = await backgroundRemovalService.processBatch(
+            [{ uri: capturedUri }],
+            (progress) => {
+              console.log('BG Removal Progress:', progress);
+            },
+            (status) => {
+              setBgRemovalStatus(status);
+            }
+          );
+          
+          if (bgRemovalResult && bgRemovalResult.length > 0 && bgRemovalResult[0].success) {
+            capturedUri = bgRemovalResult[0].processedUri || bgRemovalResult[0].uri;
+            console.log('Background removed successfully:', capturedUri);
+            setBgRemovalStatus('Background removed successfully!');
+          } else {
+            throw new Error(bgRemovalResult[0]?.error || 'Background removal failed');
+          }
+        } catch (bgError) {
+          console.error('Background removal error:', bgError);
+          setError(`Background removal failed: ${bgError.message}`);
+          setIsProcessingBg(false);
+          setIsLoading(false);
+          return;
+        } finally {
+          setIsProcessingBg(false);
+        }
+      }
 
       // Cache-bust the URI so Image reloads even if file path is reused
       const cacheSuffix = `t=${Date.now()}`;
@@ -255,14 +293,14 @@ const Crop = ({ route, navigation }) => {
             </View>
           )}
           
-          <TouchableOpacity 
+          {/* <TouchableOpacity 
             style={styles.shapeToggle}
             onPress={() => setShowCircle(prev => !prev)}
           >
             <Text style={styles.shapeToggleText}>
               {showCircle ? '⬛ Preview' : '⭕ Preview'}
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
 
         {error && (
@@ -280,6 +318,18 @@ const Crop = ({ route, navigation }) => {
           </View>
         )}
 
+        {/* Background Removal Checkbox */}
+        <TouchableOpacity 
+          style={styles.checkboxContainer}
+          onPress={() => setRemoveBackground(!removeBackground)}
+          disabled={isLoading}
+        >
+          <View style={[styles.checkbox, removeBackground && styles.checkboxChecked]}>
+            {removeBackground && <Text style={styles.checkmark}>✓</Text>}
+          </View>
+          <Text style={styles.checkboxLabel}>Remove background for this image</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.cropButton, isLoading && styles.cropButtonDisabled]}
           onPress={cropImage}
@@ -292,6 +342,22 @@ const Crop = ({ route, navigation }) => {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Background Removal Loading Modal */}
+      <Modal
+        visible={isProcessingBg}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.modalTitle}>Processing Image</Text>
+            <Text style={styles.modalStatus}>{bgRemovalStatus}</Text>
+            <Text style={styles.modalSubtext}>Please wait...</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -431,5 +497,85 @@ const styles = StyleSheet.create({
     borderRadius: SPACING.xs || 8,
     backgroundColor: 'transparent',
     zIndex: 15, // Above everything else but still allows interaction
+  },
+  retryButton: {
+    marginTop: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.accent,
+    borderRadius: SPACING.xs,
+  },
+  retryButtonText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.white,
+    fontWeight: 'bold',
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: COLORS.textSecondary || '#333',
+    borderRadius: 4,
+    marginRight: SPACING.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.primary || '#2962FF',
+    borderColor: COLORS.primary || '#2962FF',
+  },
+  checkmark: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  checkboxLabel: {
+    ...TYPOGRAPHY.bodyMedium,
+    color: COLORS.textSecondary || '#333',
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: SPACING.md,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    minWidth: 280,
+    elevation: 5,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  modalTitle: {
+    ...TYPOGRAPHY.button,
+    fontSize: 18,
+    color: COLORS.black,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  modalStatus: {
+    ...TYPOGRAPHY.bodyMedium,
+    color: COLORS.primary || '#2962FF',
+    textAlign: 'center',
+    marginBottom: SPACING.xs,
+  },
+  modalSubtext: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
 });
