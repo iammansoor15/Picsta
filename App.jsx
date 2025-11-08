@@ -19,7 +19,7 @@ import Crop from './src/Components/Crop';
 import BannerCrop from './src/Components/BannerCrop';
 import BannerCreate from './src/Components/BannerCreate';
 import UserBannersScreen from './src/screens/UserBannersScreen';
-import ProfileEntry from './src/Components/ProfileEntry';
+import RegisterWithOTP from './src/screens/RegisterWithOTP';
 import CustomHeader from './src/Components/CustomHeader';
 import NavigationService from './src/services/NavigationService';
 import ReduxInitializer from './src/Components/ReduxInitializer';
@@ -117,10 +117,10 @@ export default function App() {
               })}
             />
 
-            {/* Sign In / Register */}
+            {/* Register with OTP */}
             <Stack.Screen 
-              name="ProfileEntry" 
-              component={ProfileEntry}
+              name="RegisterWithOTP" 
+              component={RegisterWithOTP}
               options={{
                 headerShown: false,
                 animation: 'slide_from_right',

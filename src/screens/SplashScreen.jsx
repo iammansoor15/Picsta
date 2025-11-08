@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Image, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Logo from '../../assets/PicStar_logo.png';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
 
@@ -24,9 +25,22 @@ const SplashScreen = () => {
       })
     ]).start();
 
-    // Navigate to HeroScreen after delay
-    const timer = setTimeout(() => {
-      navigation.replace('HeroScreen');
+    // Check authentication and navigate accordingly
+    const timer = setTimeout(async () => {
+      try {
+        const authToken = await AsyncStorage.getItem('authToken');
+        if (authToken) {
+          // User is authenticated, go to main app
+          navigation.replace('HeroScreen');
+        } else {
+          // No authentication, go to OTP registration
+          navigation.replace('RegisterWithOTP');
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        // On error, default to registration screen
+        navigation.replace('RegisterWithOTP');
+      }
     }, 3000);
 
     return () => clearTimeout(timer);

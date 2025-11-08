@@ -83,5 +83,54 @@ export default {
     const data = await handle(resp);
     console.log('AuthService.me: success');
     return data;
+  },
+  
+  // OTP-based authentication methods
+  async sendOtp(phone, mode = 'register') {
+    const body = JSON.stringify({ phone, mode });
+    const authBase = base();
+    console.log('AuthService.sendOtp: sending OTP to', phone, 'mode:', mode);
+    console.log('AuthService.sendOtp: base', authBase);
+    const resp = await fetchWithTimeout(`${authBase}/api/auth/send-otp`, { method: 'POST', headers: jsonHeaders, body }, 15000);
+    console.log('AuthService.sendOtp: response status', resp.status);
+    const data = await handle(resp);
+    console.log('AuthService.sendOtp: OTP sent successfully');
+    return data;
+  },
+  
+  async checkOtp({ phone, otp }) {
+    const body = JSON.stringify({ phone, otp });
+    const authBase = base();
+    console.log('AuthService.checkOtp: checking OTP for', phone);
+    console.log('AuthService.checkOtp: base', authBase);
+    const resp = await fetchWithTimeout(`${authBase}/api/auth/check-otp`, { method: 'POST', headers: jsonHeaders, body }, 15000);
+    console.log('AuthService.checkOtp: response status', resp.status);
+    const data = await handle(resp);
+    console.log('AuthService.checkOtp: OTP is valid');
+    return data;
+  },
+  
+  async verifyOtp({ phone, otp, name }) {
+    const body = JSON.stringify({ phone, otp, name });
+    const authBase = base();
+    console.log('AuthService.verifyOtp: verifying OTP for', phone);
+    console.log('AuthService.verifyOtp: base', authBase);
+    const resp = await fetchWithTimeout(`${authBase}/api/auth/verify-otp`, { method: 'POST', headers: jsonHeaders, body }, 15000);
+    console.log('AuthService.verifyOtp: response status', resp.status);
+    const data = await handle(resp);
+    console.log('AuthService.verifyOtp: OTP verified successfully');
+    return data;
+  },
+  
+  async resendOtp(phone, mode = 'register') {
+    const body = JSON.stringify({ phone, mode });
+    const authBase = base();
+    console.log('AuthService.resendOtp: resending OTP to', phone, 'mode:', mode);
+    console.log('AuthService.resendOtp: base', authBase);
+    const resp = await fetchWithTimeout(`${authBase}/api/auth/resend-otp`, { method: 'POST', headers: jsonHeaders, body }, 15000);
+    console.log('AuthService.resendOtp: response status', resp.status);
+    const data = await handle(resp);
+    console.log('AuthService.resendOtp: OTP resent successfully');
+    return data;
   }
 };

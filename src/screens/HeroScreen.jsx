@@ -3955,15 +3955,19 @@ React.useEffect(() => {
           <TouchableOpacity
             onPress={async () => {
               try {
-                const token = await AsyncStorage.getItem('AUTH_TOKEN');
+                // Check for auth token (OTP registration uses 'authToken')
+                const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
                 if (!token) {
-                  navigation.navigate('ProfileEntry');
+                  // No token, navigate to registration
+                  navigation.navigate('RegisterWithOTP');
                   return;
                 }
               } catch (e) {
-                navigation.navigate('ProfileEntry');
+                // Error getting token, navigate to registration
+                navigation.navigate('RegisterWithOTP');
                 return;
               }
+              // User is authenticated, go to profile
               navigation.navigate('ProfileScreen');
             }}
             style={styles.profilePhotoContainerUnderHeader}

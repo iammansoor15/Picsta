@@ -157,8 +157,9 @@ const ProfileScreen = () => {
     let cancelled = false;
     (async () => {
       try {
-        const token = await AsyncStorage.getItem('AUTH_TOKEN');
-        const userJson = await AsyncStorage.getItem('AUTH_USER');
+        // Check for both old and new token keys
+        const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
+        let userJson = await AsyncStorage.getItem('user') || await AsyncStorage.getItem('AUTH_USER');
         let user = null;
         if (userJson) {
           try { user = JSON.parse(userJson); } catch {}
@@ -168,7 +169,7 @@ const ProfileScreen = () => {
             const me = await AuthService.me(token);
             user = me?.user || me;
             if (user) {
-              await AsyncStorage.setItem('AUTH_USER', JSON.stringify(user));
+              await AsyncStorage.setItem('user', JSON.stringify(user));
             }
           } catch (e) {
             console.warn('Failed to load user via /me:', e?.message || e);
@@ -792,9 +793,13 @@ const ProfileScreen = () => {
             try {
               // 1) Clear auth token so app treats user as logged out everywhere
               try {
-                await AsyncStorage.removeItem('AUTH_TOKEN');
-                await AsyncStorage.removeItem('AUTH_USER');
-                console.log('🔐 Auth token and user removed');
+                // Clear both old and new auth token keys
+                await AsyncStorage.removeItem('AUTH_TOKEN'); // Legacy
+                await AsyncStorage.removeItem('AUTH_USER'); // Legacy
+                await AsyncStorage.removeItem('authToken'); // OTP registration
+                await AsyncStorage.removeItem('user'); // OTP registration
+                await AsyncStorage.removeItem('tempAuthToken'); // Temp token from OTP check
+                console.log('🔐 All auth tokens and user data removed');
               } catch (tokenErr) {
                 console.warn('Could not remove auth storage:', tokenErr?.message || tokenErr);
               }
@@ -807,15 +812,21 @@ const ProfileScreen = () => {
             } catch (e) {
               console.warn('Logout cleanup error:', e?.message || e);
             } finally {
-              // Reset navigation stack to splash or home; splash is safer to re-init state
+              // Reset navigation stack to RegisterWithOTP (since ProfileEntry no longer exists)
               try {
-                if (NavigationService.resetToSplash) {
-                  NavigationService.resetToSplash();
-                } else {
-                  NavigationService.resetToHome();
-                }
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'RegisterWithOTP' }],
+                });
+                console.log('✅ Logged out and navigated to RegisterWithOTP');
               } catch (navErr) {
                 console.warn('Navigation reset error:', navErr?.message || navErr);
+                // Fallback to goBack or manual navigation
+                try {
+                  navigation.navigate('RegisterWithOTP');
+                } catch (fallbackErr) {
+                  console.warn('Fallback navigation failed:', fallbackErr);
+                }
               }
             }
           },
