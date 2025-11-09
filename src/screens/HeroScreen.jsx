@@ -1536,6 +1536,8 @@ const HeroScreen = ({ route, navigation }) => {
           const axis = doc?.photo_container_axis || doc?.photoAxis || doc?.photo_position;
           const rawX = Number(axis?.x);
           const rawY = Number(axis?.y);
+          const currentSerial = doc?.serial_no;
+          
           if (Number.isFinite(rawX) && Number.isFinite(rawY)) {
             const padding = 10;
             const maxX = Math.max(padding, containerWidth - photo1Size - padding);
@@ -1543,14 +1545,22 @@ const HeroScreen = ({ route, navigation }) => {
             const clampedX = Math.max(padding, Math.min(maxX, rawX));
             const clampedY = Math.max(padding, Math.min(maxY, rawY));
             
-            // Only apply axis if user hasn't manually moved the static photo yet
-            if (!hasUserMovedStaticPhotoRef.current) {
+            // Apply axis only if switching to a different template (different serial number)
+            const isDifferentTemplate = lastAppliedPhotoAxisSerial.current !== currentSerial;
+            
+            if (isDifferentTemplate) {
               try {
                 if (pan1X && typeof pan1X.value !== 'undefined') pan1X.value = clampedX;
                 if (pan1Y && typeof pan1Y.value !== 'undefined') pan1Y.value = clampedY;
+                lastAppliedPhotoAxisSerial.current = currentSerial;
+                // Reset the manual movement flag for this new template
+                hasUserMovedStaticPhotoRef.current = false;
+                console.log('📍 Applied photo axis from template schema:', { x: clampedX, y: clampedY, serial: currentSerial });
               } catch (e) {
                 console.error('❌ Error setting photo position:', e);
               }
+            } else {
+              console.log('🔒 Same template - keeping user-adjusted photo position:', { serial: currentSerial });
             }
           }
         } catch (e) {
@@ -1562,6 +1572,8 @@ const HeroScreen = ({ route, navigation }) => {
           const tAxis = doc?.text_container_axis || doc?.textAxis || doc?.text_position || doc?.text_axis;
           const tRawX = Number(tAxis?.x);
           const tRawY = Number(tAxis?.y);
+          const currentSerial = doc?.serial_no;
+          
           if (Number.isFinite(tRawX) && Number.isFinite(tRawY)) {
             const padding = 10;
             // Use existing first text element size if available, else estimated
@@ -1573,37 +1585,44 @@ const HeroScreen = ({ route, navigation }) => {
             const tX = Math.max(padding, Math.min(tMaxX, tRawX));
             const tY = Math.max(padding, Math.min(tMaxY, tRawY));
 
-            // Update existing text or create new one at backend position
-            setTextElements(prev => {
-              if (!Array.isArray(prev) || prev.length === 0) {
-                // No text exists - create default at backend position
-                const newEl = {
-                  id: `default-text-${Date.now()}`,
-                  text: 'Your Text',
-                  x: tX,
-                  y: tY,
-                  width: tWidth,
-                  height: tHeight,
-                  color: COLORS.white,
-                  fontWeight: 'bold',
-                  textAlign: 'center',
-                  backgroundColor: 'rgba(0, 0, 0, 0.8)'
-                };
-                try { if (defaultTextAddedRef && defaultTextAddedRef.current !== undefined) defaultTextAddedRef.current = true; } catch {}
-                return [newEl];
-              } else {
-                // Text exists - update FIRST text element to backend position
-                // BUT only if user hasn't manually moved it
-                const firstId = prev[0].id;
-                const userMoved = movedTextIdsRef?.current?.has(firstId);
-                if (userMoved) {
-                  return prev;
+            // Apply axis only if switching to a different template (different serial number)
+            const isDifferentTemplate = lastAppliedTextAxisSerial.current !== currentSerial;
+            
+            if (isDifferentTemplate) {
+              setTextElements(prev => {
+                // Clear the moved text IDs tracking for the new template
+                movedTextIdsRef.current.clear();
+                
+                if (!Array.isArray(prev) || prev.length === 0) {
+                  // No text exists - create default at backend position
+                  const newEl = {
+                    id: `default-text-${Date.now()}`,
+                    text: 'Your Text',
+                    x: tX,
+                    y: tY,
+                    width: tWidth,
+                    height: tHeight,
+                    color: COLORS.white,
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)'
+                  };
+                  try { if (defaultTextAddedRef && defaultTextAddedRef.current !== undefined) defaultTextAddedRef.current = true; } catch {}
+                  lastAppliedTextAxisSerial.current = currentSerial;
+                  console.log('📍 Created text at template axis:', { x: tX, y: tY, serial: currentSerial });
+                  return [newEl];
+                } else {
+                  // Text exists - update FIRST text element to new template's axis
+                  lastAppliedTextAxisSerial.current = currentSerial;
+                  console.log('📍 Applied text axis from template schema:', { x: tX, y: tY, serial: currentSerial });
+                  return prev.map((el, idx) => 
+                    idx === 0 ? { ...el, x: tX, y: tY, width: tWidth, height: tHeight } : el
+                  );
                 }
-                return prev.map((el, idx) => 
-                  idx === 0 ? { ...el, x: tX, y: tY, width: tWidth, height: tHeight } : el
-                );
-              }
-            });
+              });
+            } else {
+              console.log('🔒 Same template - keeping user-adjusted text position:', { serial: currentSerial });
+            }
           }
         } catch (e) {
           console.error('❌ Error applying text position:', e);
@@ -2223,6 +2242,9 @@ React.useEffect(() => {
   const isDraggingRef = React.useRef(false);
   const hasUserMovedStaticPhotoRef = React.useRef(false);
   const movedTextIdsRef = React.useRef(new Set());
+  // Track the last template serial number whose axis was applied
+  const lastAppliedPhotoAxisSerial = React.useRef(null);
+  const lastAppliedTextAxisSerial = React.useRef(null);
 
   // Animated style for single photo container
   const animatedStyle1 = useAnimatedStyle(() => {
