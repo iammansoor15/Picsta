@@ -93,7 +93,7 @@ const Crop = ({ route, navigation }) => {
   const [error, setError] = useState(null);
   const [showCircle, setShowCircle] = useState(initialShape === 'circle' || true);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [removeBackground, setRemoveBackground] = useState(false);
+  const [removeBackground, setRemoveBackground] = useState(true); // Default to true - checked by default
   const [isProcessingBg, setIsProcessingBg] = useState(false);
   const [bgRemovalStatus, setBgRemovalStatus] = useState('');
 
@@ -224,7 +224,13 @@ const Crop = ({ route, navigation }) => {
       // Try callback if provided
       if (typeof onCropDone === 'function') {
         try {
-          onCropDone({ croppedUri: finalUri, photoNumber, photoId, isDynamicPhoto });
+          onCropDone({ 
+            croppedUri: finalUri, 
+            photoNumber, 
+            photoId, 
+            isDynamicPhoto,
+            backgroundRemoved: removeBackground // Pass the flag to indicate if BG was already removed
+          });
         } catch (callbackErr) {
           console.warn('onCropDone callback error (will still use manager):', callbackErr?.message || callbackErr);
         }

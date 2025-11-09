@@ -65,6 +65,7 @@ export default function App() {
             barStyle="light-content" 
             backgroundColor={COLORS.primary} 
             translucent={false}
+            hidden={false}
           />
           <NavigationContainer
             ref={navigationRef}

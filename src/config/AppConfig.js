@@ -19,12 +19,12 @@ const AppConfig = {
     ENABLE_LOGGING: true,
     SHOW_SERVER_CONFIG: true, // Enable manual server config for debugging
 
-    // Using remote server for development
+    // Using remote server
     DEV_SERVER_URL: 'http://31.97.233.69:10000', // Remote server
     DEV_AUTH_SERVER_URL: null,
 
     // Allow production fallback
-    USE_PRODUCTION_FALLBACK: true, // Use production server
+    USE_PRODUCTION_FALLBACK: true, // Use production/remote server
 
   }
 };

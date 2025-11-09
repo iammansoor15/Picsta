@@ -10,6 +10,7 @@ import {
   Dimensions,
   ActivityIndicator,
   Modal,
+  Alert,
 } from 'react-native';
 import CustomAlert from '../Components/CustomAlert';
 import LinearGradient from 'react-native-linear-gradient';
@@ -293,15 +294,17 @@ const ProfileScreen = () => {
     // return unsubscribe;
   }, []); // Empty dependency array - only run on mount
 
-// Process profile image: send to BG removal service with timeout, use bg-removed as profile photo
-  const processProfileImage = async (imageUri) => {
+// Process profile image: optionally send to BG removal service if not already done
+  const processProfileImage = async (imageUri, backgroundAlreadyRemoved = false) => {
     if (!imageUri) {
       console.log('❌ No image URI provided for processing');
       return;
     }
 
     try {
-      console.log('🎭 ProfileScreen: Processing profile picture with background removal:', imageUri);
+      console.log('🎭 ProfileScreen: Processing profile picture:', imageUri);
+      console.log('🎭 Background already removed in Crop screen:', backgroundAlreadyRemoved);
+      
       // Normalize: strip any cache-busting query suffix and ensure file:// prefix
       const clean = (u) => {
         const noQuery = typeof u === 'string' ? u.split('?')[0] : u;
@@ -313,50 +316,23 @@ const ProfileScreen = () => {
       
       let profileImageToUse = normalizedUri; // Default to original
       let bgRemovedUri = null;
-      let bgRemovalSuccess = false;
+      let bgRemovalSuccess = backgroundAlreadyRemoved; // If already removed in Crop, mark as success
 
-      try {
-        // Step 1: Send to background removal service with 1.5 minute timeout
-        setProcessingStatus('Removing background...');
-        console.log('🔄 Sending image to background removal service (timeout: 90 seconds)...');
-        
-        // Create a timeout promise (90 seconds = 1.5 minutes)
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Background removal timeout')), 90000);
-        });
-        
-        // Race between background removal and timeout
-        const bgRemovalPromise = BackgroundRemovalService.processBatch(
-          [{ uri: normalizedUri }],
-          (progress) => {
-            console.log('📊 Background removal progress:', progress);
-          },
-          (status) => {
-            setProcessingStatus(status);
-          }
-        );
-        
-        const bgRemovalResults = await Promise.race([bgRemovalPromise, timeoutPromise]);
-        
-        console.log('✅ Background removal complete:', bgRemovalResults);
-
-        // Step 2: Get the processed (bg-removed) image URI
-        bgRemovedUri = bgRemovalResults?.[0]?.processedUri || bgRemovalResults?.[0]?.uri;
-        
-        if (bgRemovedUri) {
-          bgRemovalSuccess = true;
-          profileImageToUse = bgRemovedUri; // Use bg-removed image as profile photo
-          console.log('✅ Background removal successful! Using bg-removed image as profile photo');
-        } else {
-          console.warn('⚠️ Background removal returned no image, using original');
-        }
-      } catch (bgError) {
-        console.warn('⚠️ Background removal failed or timed out:', bgError.message);
-        console.log('📸 Falling back to original image as profile photo');
-        // profileImageToUse remains as normalizedUri (original)
+      // Background removal is now ONLY done in Crop screen based on checkbox
+      // If user selected "Remove background" in Crop, it's already done
+      // If user didn't select it, we respect that choice and don't remove it
+      if (backgroundAlreadyRemoved) {
+        console.log('✅ Background was already removed in Crop screen');
+        bgRemovedUri = normalizedUri; // The cropped image already has BG removed
+        profileImageToUse = normalizedUri; // Use the BG-removed version
+      } else {
+        console.log('ℹ️ User chose not to remove background - using cropped image as-is');
+        console.log('📸 Using cropped image with original background');
+        // Just use the cropped image as-is (no BG removal)
+        profileImageToUse = normalizedUri;
       }
 
-      // Step 3: Save both versions to local storage
+      // Step 3: Save images to local storage
       setProcessingStatus('Saving images...');
       console.log('💾 Saving original and bg-removed images...');
       console.log('   Original URI:', normalizedUri);
@@ -393,7 +369,7 @@ const ProfileScreen = () => {
       
       const successMessage = bgRemovalSuccess
         ? 'Your profile picture has been updated with background removed!'
-        : 'Your profile picture has been updated! (Background removal timed out, using original image)';
+        : 'Your profile picture has been updated!';
       
       setAlertConfig({
         visible: true,
@@ -455,7 +431,8 @@ const ProfileScreen = () => {
 
     // If user is not signed in, navigate to sign-in page first
     try {
-      const token = await AsyncStorage.getItem('AUTH_TOKEN');
+      // Check for both possible token keys
+      const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
       if (!token) {
         console.log('🔐 No auth token found. Redirecting to ProfileEntry (Sign In)');
         navigation.navigate('ProfileEntry');
@@ -539,11 +516,13 @@ const ProfileScreen = () => {
           onCropDone: async (payload) => {
             try {
               const cropped = payload?.croppedUri || payload?.uri || result.uri;
+              const bgRemoved = payload?.backgroundRemoved || false;
               console.log('📷 ProfileScreen: onCropDone received, applying cropped image:', cropped);
-              await processProfileImage(cropped);
+              console.log('📷 ProfileScreen: Background removed in Crop:', bgRemoved);
+              await processProfileImage(cropped, bgRemoved);
             } catch (e) {
               console.warn('onCropDone error (profile):', e?.message || e);
-              try { await processProfileImage(result.uri); } catch {}
+              try { await processProfileImage(result.uri, false); } catch {}
             }
           }
         });
@@ -708,10 +687,12 @@ const ProfileScreen = () => {
           onCropDone: async (payload) => {
             try {
               const cropped = payload?.croppedUri || result.uri;
-              await processProfileImage(cropped);
+              const bgRemoved = payload?.backgroundRemoved || false;
+              console.log('📷 ProfileScreen: Background removed in Crop:', bgRemoved);
+              await processProfileImage(cropped, bgRemoved);
             } catch (e) {
               console.warn('onCropDone error (profile):', e?.message || e);
-              try { await processProfileImage(result.uri); } catch {}
+              try { await processProfileImage(result.uri, false); } catch {}
             }
           }
         });
@@ -882,6 +863,8 @@ const ProfileScreen = () => {
             style={styles.profileImageWrapper}
             onPress={handleProfileImagePress}
             activeOpacity={0.8}
+            disabled={isProcessingProfile}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Image
               key={`profile-image-${profilePictureUri || 'default'}`}
@@ -896,14 +879,14 @@ const ProfileScreen = () => {
               onError={handleImageError}
             />
             {isProcessingProfile && (
-              <View style={styles.processingOverlay}>
+              <View style={styles.processingOverlay} pointerEvents="none">
                 <ActivityIndicator size="large" color={COLORS.white} />
                 <Text style={styles.processingText}>
                   {processingStatus || 'Processing...'}
                 </Text>
               </View>
             )}
-            <View style={styles.editIconContainer}>
+            <View style={styles.editIconContainer} pointerEvents="none">
               <Text style={styles.editIcon}>✏️</Text>
             </View>
           </TouchableOpacity>

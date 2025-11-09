@@ -2,7 +2,7 @@
 
 export const COLORS = {
     // Primary colors
-  primary: '#6c48c7',  // Blue
+  primary: '#5d1e99',  // Purple
   primaryDark: '#0039CB',
   primaryLight: '#768FFF',
   primaryA50: 'rgba(41, 98, 255, 0.05)',
