@@ -17,8 +17,10 @@ import HeroScreen from './src/screens/HeroScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import Crop from './src/Components/Crop';
 import BannerCrop from './src/Components/BannerCrop';
+import TemplateCrop from './src/Components/TemplateCrop';
 import BannerCreate from './src/Components/BannerCreate';
 import UserBannersScreen from './src/screens/UserBannersScreen';
+import UserTemplatesScreen from './src/screens/UserTemplatesScreen';
 import RegisterWithOTP from './src/screens/RegisterWithOTP';
 import CustomHeader from './src/Components/CustomHeader';
 import NavigationService from './src/services/NavigationService';
@@ -167,6 +169,16 @@ export default function App() {
               }}
             />
 
+            {/* Template Crop Screen */}
+            <Stack.Screen 
+              name="TemplateCrop" 
+              component={TemplateCrop}
+              options={{
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
+
             {/* Banner Create Screen */}
             <Stack.Screen 
               name="BannerCreate" 
@@ -181,6 +193,16 @@ export default function App() {
             <Stack.Screen 
               name="UserBanners" 
               component={UserBannersScreen}
+              options={{
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
+
+            {/* User Templates Screen */}
+            <Stack.Screen 
+              name="UserTemplates" 
+              component={UserTemplatesScreen}
               options={{
                 headerShown: false,
                 animation: 'slide_from_right',

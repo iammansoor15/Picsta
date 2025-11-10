@@ -63,6 +63,7 @@ import { selectCategories, loadCategories } from '../store/slices/categorySlice'
 import { loadTemplatesByCategory } from '../store/slices/cloudinaryTemplateSlice';
 import { selectReligion as selectGlobalReligion, selectSubcategory as selectGlobalSub, setSubcategory as setGlobalSub, setReligion as setGlobalReligion, loadMainSubFromStorage, saveMainSubToStorage } from '../store/slices/mainCategorySlice';
 import TemplateService from '../services/TemplateService';
+import UserTemplatesService from '../services/UserTemplatesService';
 import AppConfig from '../config/AppConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import VideoCompositeService from '../services/VideoCompositeService';
@@ -115,6 +116,13 @@ const ResetSvgIcon = ({ size = 28, color = '#000' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path d="M3 12a9 9 0 1 0 9-9" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     <Path d="M3 4v5h5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const TemplateSvgIcon = ({ size = 28, color = '#000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="4" y="3" width="16" height="18" rx="2" stroke={color} strokeWidth={2} />
+    <Path d="M9 7h6M9 11h6M9 15h4" stroke={color} strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );
 
@@ -693,12 +701,44 @@ const HeroScreen = ({ route, navigation }) => {
   const initialParams = route.params || {};
   const [templateImage, setTemplateImage] = useState(initialParams.image);
   
+  // Local mode support for exact replica usage
+  const localMode = !!initialParams.localMode;
+  const initialLocalTemplates = Array.isArray(initialParams.initialTemplates) ? initialParams.initialTemplates : null;
+  const initialLocalIndex = typeof initialParams.initialIndex === 'number' ? Math.max(0, Math.floor(initialParams.initialIndex)) : 0;
+  
   // Reels templates across all categories
   const dispatch = useDispatch();
   const categories = useSelector(selectCategories);
   const [reelsTemplates, setReelsTemplates] = useState([]);
   
   const [isReelsLoading, setIsReelsLoading] = useState(false);
+  
+  // Initialize from local templates when localMode is enabled
+  React.useEffect(() => {
+    if (localMode && initialLocalTemplates) {
+      const normalizeUri = (u) => {
+        if (!u) return null;
+        if (typeof u !== 'string') return u;
+        let s = u.replace(/^"|"$/g, '');
+        if (s.startsWith('/')) s = `file://${s}`;
+        return s;
+      };
+      const mapped = initialLocalTemplates.map((t, idx) => ({
+        ...t,
+        serial_no: t?.serial_no || idx + 1,
+        image_url: normalizeUri(t?.image_url || t?.url || t?.uri),
+      }));
+      setReelsTemplates(mapped);
+      setSelectedCategory('local');
+      // Set initial index/serial for starting position
+      const safeIndex = Math.max(0, Math.min(mapped.length - 1, initialLocalIndex));
+      setCurrentReelIndex(safeIndex);
+      const startSerial = mapped[safeIndex]?.serial_no || 1;
+      setCurrentSerial(startSerial);
+      setIsReelsLoading(false);
+    }
+  }, [localMode, initialLocalTemplates, initialLocalIndex]);
+  
   
 // Selected category for filtering templates
   const [selectedCategory, setSelectedCategory] = useState(null); // Start with null to allow proper initialization
@@ -713,6 +753,7 @@ const HeroScreen = ({ route, navigation }) => {
 
   // Keep local selectedCategory in sync with global subcategory
   React.useEffect(() => {
+    if (localMode) return;
     if (globalSubcategory && globalSubcategory !== selectedCategory) {
       setSelectedCategory(globalSubcategory);
     } else if (!selectedCategory && !globalSubcategory) {
@@ -724,6 +765,7 @@ const HeroScreen = ({ route, navigation }) => {
   // Persist selected subcategory; also persist to global slice storage (only if changed)
   const persistenceTimeoutRef = React.useRef(null);
   React.useEffect(() => {
+    if (localMode) return;
     if (!selectedCategory) return;
     if (selectedCategory === globalSubcategory) return;
     
@@ -802,6 +844,7 @@ const HeroScreen = ({ route, navigation }) => {
 
   // Trigger refresh whenever main/sub selection changes
   React.useEffect(() => {
+    if (localMode) return; // skip all cloud refresh in local mode
     const main = (globalReligion || 'all');
     const sub = (globalSubcategory || selectedCategory || 'congratulations');
     
@@ -816,12 +859,13 @@ const HeroScreen = ({ route, navigation }) => {
         if (sub) refreshForSelection(main, sub);
       }, 1500);
     }
-  }, [globalReligion, globalSubcategory, selectedCategory, refreshForSelection]);
+  }, [globalReligion, globalSubcategory, selectedCategory, refreshForSelection, localMode]);
   const [selectedReligions, setSelectedReligions] = useState(['hindu']);
   const [showCategoryFilter, setShowCategoryFilter] = useState(false);
 
   // Initialize selected religions from saved preferences
   React.useEffect(() => {
+    if (localMode) return;
     (async () => {
       try {
         const arr = await TemplatePreferences.getReligions();
@@ -895,6 +939,7 @@ const HeroScreen = ({ route, navigation }) => {
 
   // Detect religion changes and trigger reset
   React.useEffect(() => {
+    if (localMode) return;
     const currentReligion = globalReligion;
     const previousReligion = previousReligionRef.current;
     
@@ -923,24 +968,21 @@ const HeroScreen = ({ route, navigation }) => {
   }, [globalReligion, resetHeroScreen, refreshForSelection, selectedCategory]);
   useFocusEffect(
     React.useCallback(() => {
+      if (localMode) return () => {};
       let active = true;
       (async () => {
         try {
           // Only load from storage on first focus or if we have no current selection
           const shouldLoadFromStorage = !hasLoaded.current || (!selectedCategory && !globalSubcategory);
-          
           if (!shouldLoadFromStorage) {
             return;
           }
-          
           const [r, s] = await Promise.all([
             TemplatePreferences.getReligion(),
             TemplatePreferences.getSubcategory(),
           ]);
-          
           if (!active) return;
           hasLoaded.current = true;
-          
           if (r) {
             const arr = Array.isArray(r) ? r : [r];
             if (JSON.stringify(arr) !== JSON.stringify(selectedReligions)) {
@@ -955,11 +997,10 @@ const HeroScreen = ({ route, navigation }) => {
             if (s !== globalSubcategory) dispatch(setGlobalSub(s));
           }
           try { dispatch(saveMainSubToStorage()); } catch {}
-        } catch (err) {
-        }
+        } catch (err) {}
       })();
       return () => { active = false; };
-    }, [dispatch, globalReligion, globalSubcategory, selectedReligions, selectedCategory])
+    }, [dispatch, globalReligion, globalSubcategory, selectedReligions, selectedCategory, localMode])
   );
   const reelsListRef = useRef(null);
   const [currentReelIndex, setCurrentReelIndex] = useState(0);
@@ -970,6 +1011,7 @@ const HeroScreen = ({ route, navigation }) => {
   
   // Log pagination state changes
   React.useEffect(() => {
+    if (localMode) return;
     console.log('📊 Pagination State Changed:', {
       currentPage: page,
       templatesCount: reelsTemplates.length,
@@ -1256,6 +1298,7 @@ const HeroScreen = ({ route, navigation }) => {
   
 // Load template preferences (religion + subcategory) and hydrate global slice
   React.useEffect(() => {
+    if (localMode) return;
     let cancelled = false;
     (async () => {
       try {
@@ -1286,6 +1329,7 @@ const HeroScreen = ({ route, navigation }) => {
 
 // Fetch latest template image and set it as background template
   React.useEffect(() => {
+    if (localMode) return;
     let cancelled = false;
     (async () => {
       try {
@@ -1699,6 +1743,7 @@ React.useEffect(() => {
 
 // Fetch template whenever currentSerial or selected category changes
 React.useEffect(() => {
+  if (localMode) return;
   let canceled = false;
   const load = async () => {
     setIsSerialLoading(true);
@@ -1723,6 +1768,7 @@ React.useEffect(() => {
 
 // Fetch batches of 5 images in order using (category, subcategory, image_url, serial_no)
 React.useEffect(() => {
+  if (localMode) return;
   let canceled = false;
   (async () => {
     try {
@@ -2359,6 +2405,7 @@ React.useEffect(() => {
   
   // Load more templates for 'congratulations' category
   const handleLoadMore = React.useCallback(async () => {
+    if (localMode) return;
     const loadStartTime = performance.now();
     console.log('📚 Load More Triggered:', {
       currentPage: page,
@@ -2891,6 +2938,82 @@ React.useEffect(() => {
   const handlePhotoUnfocus = (photoId) => {
     if (focusedPhotoId === photoId) {
       setFocusedPhotoId(null);
+    }
+  };
+
+  // Template button handler - show options to create new or view existing templates
+  const handleTemplateButtonPress = async () => {
+    try {
+      // Check if user has any templates
+      const templates = await UserTemplatesService.getAllTemplates();
+      
+      if (templates.length > 0) {
+        // Show dialog with options
+        setAlertConfig({
+          visible: true,
+          title: 'Template Options',
+          message: 'What would you like to do?',
+          buttons: [
+            { 
+              text: 'View My Templates', 
+              onPress: () => navigation.navigate('UserTemplates')
+            },
+            { 
+              text: 'Create New Template', 
+              onPress: () => openGalleryForNewTemplate()
+            },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        });
+      } else {
+        // No templates yet, directly open gallery
+        openGalleryForNewTemplate();
+      }
+    } catch (error) {
+      console.error('Error checking templates:', error);
+      // On error, just open gallery
+      openGalleryForNewTemplate();
+    }
+  };
+
+  // Open gallery to create new template
+  const openGalleryForNewTemplate = async () => {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 1,
+        selectionLimit: 1,
+      });
+
+      if (result.didCancel) {
+        console.log('User cancelled image picker');
+        return;
+      }
+
+      if (result.errorCode) {
+        console.error('ImagePicker Error:', result.errorMessage);
+        setAlertConfig({
+          visible: true,
+          title: 'Error',
+          message: 'Failed to open gallery',
+          buttons: [{ text: 'OK' }]
+        });
+        return;
+      }
+
+      const asset = result.assets?.[0];
+      if (asset?.uri) {
+        // Navigate to TemplateCrop screen
+        navigation.navigate('TemplateCrop', { uri: asset.uri });
+      }
+    } catch (error) {
+      console.error('Error opening gallery for template:', error);
+      setAlertConfig({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to open gallery',
+        buttons: [{ text: 'OK' }]
+      });
     }
   };
 
@@ -3930,6 +4053,7 @@ React.useEffect(() => {
       <View style={{ flex: 1 }}>
         
         {/* Top row: Category tabs (left) and Profile photo (right) */}
+        {!localMode && (
         <View style={styles.topBarRow}>
           {/* Category tabs (wrap to multiple lines) */}
           <View style={styles.categoryTabsWrap}>
@@ -4009,6 +4133,7 @@ React.useEffect(() => {
             />
           </TouchableOpacity>
         </View>
+        )}
 
 
         {/* TEMPORARY: Debug component for testing button toggle */}
@@ -4737,6 +4862,23 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                       <PhotoSvgIcon color="#000" size={22} />
                     </View>
                     <Text style={styles.menuLabelText} numberOfLines={2}>Photo</Text>
+                  </TouchableOpacity>
+
+                  {/* Template button: create custom templates */}
+                  <TouchableOpacity 
+                    style={styles.templateButton}
+                    onPress={() => {
+                      try {
+                        handleTemplateButtonPress();
+                      } catch (error) {
+                        console.error('Template button error:', error);
+                      }
+                    }}
+                  >
+                    <View style={styles.menuIconCircle}>
+                      <TemplateSvgIcon color="#000" size={22} />
+                    </View>
+                    <Text style={styles.menuLabelText} numberOfLines={2}>Template</Text>
                   </TouchableOpacity>
 
                 </View>
@@ -5738,6 +5880,20 @@ const styles = StyleSheet.create({
   },
   // Photo button styles
   photoButton: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
+    marginHorizontal: 6,
+    minWidth: 80,
+    width: 80,
+  },
+  
+  // Template button styles
+  templateButton: {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',

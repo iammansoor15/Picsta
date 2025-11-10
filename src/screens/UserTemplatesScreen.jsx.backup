@@ -1,0 +1,760 @@
+import React, { useState, useRef, useReducer } from 'react';
+import {
+  View,
+  Image,
+  StyleSheet,
+  Dimensions,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  ActivityIndicator,
+  Alert,
+  PanResponder,
+  Modal,
+} from 'react-native';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
+import { useFocusEffect } from '@react-navigation/native';
+import { FlingGestureHandler, Directions, State } from 'react-native-gesture-handler';
+import { launchImageLibrary } from 'react-native-image-picker';
+import ViewShot from 'react-native-view-shot';
+import { CameraRoll } from '@react-native-camera-roll/camera-roll';
+import CustomHeader from '../Components/CustomHeader';
+import DraggableText from '../Components/DraggableText';
+import ShapeDropdownFixed from '../Components/ShapeDropdownFixed';
+import { COLORS } from '../theme/colors';
+import UserTemplatesService from '../services/UserTemplatesService';
+import backgroundRemovalService from '../services/BackgroundRemovalService';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectProfileImage } from '../store/slices/profileSlice';
+import Feather from 'react-native-vector-icons/Feather';
+import AntDesign from 'react-native-vector-icons/AntDesign';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const MENU_BAR_HEIGHT = 113;
+const CONTAINER_PADDING = 35;
+
+const AVAILABLE_WIDTH = screenWidth - (CONTAINER_PADDING * 2);
+const AVAILABLE_HEIGHT = screenHeight - MENU_BAR_HEIGHT - (CONTAINER_PADDING * 2);
+const BOUND_PADDING = 0;
+
+const getDefaultProfileImage = () => {
+  try {
+    return require('../../assets/user/default_dp.png');
+  } catch (error) {
+    return null;
+  }
+};
+
+// Photo state reducer
+const photoStateReducer = (state, action) => {
+  switch (action.type) {
+    case 'SET_PHOTO_1':
+      return { ...state, photo1Uri: action.uri };
+    case 'CLEAR_PHOTO_1':
+      return { ...state, photo1Uri: null };
+    default:
+      return state;
+  }
+};
+
+// Draggable dynamic photo element using Reanimated
+const DynamicPhotoElement = ({
+  id,
+  uri,
+  x,
+  y,
+  size,
+  shape,
+  focused,
+  onFocus,
+  onPress,
+  onDelete,
+  onUpdatePosition,
+  onUpdateSize,
+  onDragStart,
+  onDragEnd,
+  containerWidth,
+  containerHeight,
+  minSize = 60,
+  maxSize = 200,
+}) => {
+  const translateX = useSharedValue(x || 0);
+  const translateY = useSharedValue(y || 0);
+  const lastPropX = React.useRef(x || 0);
+  const lastPropY = React.useRef(y || 0);
+
+  React.useEffect(() => {
+    const propX = x || 0;
+    const propY = y || 0;
+    if (Math.abs(propX - lastPropX.current) > 1 || Math.abs(propY - lastPropY.current) > 1) {
+      translateX.value = propX;
+      translateY.value = propY;
+      lastPropX.current = propX;
+      lastPropY.current = propY;
+    }
+  }, [x, y]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+      ],
+    };
+  }, []);
+
+  const startXRef = React.useRef(0);
+  const startYRef = React.useRef(0);
+  const isDraggingRef = React.useRef(false);
+  const hasMovedRef = React.useRef(false);
+  const gestureStartTimeRef = React.useRef(0);
+
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+      },
+      onPanResponderGrant: () => {
+        startXRef.current = translateX.value;
+        startYRef.current = translateY.value;
+        isDraggingRef.current = false;
+        hasMovedRef.current = false;
+        gestureStartTimeRef.current = Date.now();
+        try { onDragStart && onDragStart(id); } catch (e) {}
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2) {
+          hasMovedRef.current = true;
+        }
+        if (!isDraggingRef.current && hasMovedRef.current) {
+          isDraggingRef.current = true;
+        }
+
+        const padding = 10;
+        const minX = padding;
+        const minY = padding;
+        const maxX = Math.max(minX, containerWidth - size - padding);
+        const maxY = Math.max(minY, containerHeight - size - padding);
+
+        const newX = Math.max(minX, Math.min(maxX, startXRef.current + gestureState.dx));
+        const newY = Math.max(minY, Math.min(maxY, startYRef.current + gestureState.dy));
+
+        translateX.value = newX;
+        translateY.value = newY;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const gestureTime = Date.now() - gestureStartTimeRef.current;
+        const moved = Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+
+        const padding = 10;
+        const minX = padding;
+        const minY = padding;
+        const maxX = Math.max(minX, containerWidth - size - padding);
+        const maxY = Math.max(minY, containerHeight - size - padding);
+
+        const finalX = Math.max(minX, Math.min(maxX, translateX.value));
+        const finalY = Math.max(minY, Math.min(maxY, translateY.value));
+
+        translateX.value = finalX;
+        translateY.value = finalY;
+
+        if (!(moved || isDraggingRef.current || hasMovedRef.current) && gestureTime < 300) {
+          if (focused) {
+            onPress && onPress(id);
+          } else {
+            onFocus && onFocus(id);
+          }
+        } else {
+          onUpdatePosition && onUpdatePosition(id, finalX, finalY);
+        }
+
+        isDraggingRef.current = false;
+        hasMovedRef.current = false;
+        gestureStartTimeRef.current = 0;
+        try { onDragEnd && onDragEnd(id); } catch (e) {}
+      },
+      onPanResponderTerminate: () => {
+        isDraggingRef.current = false;
+        hasMovedRef.current = false;
+        gestureStartTimeRef.current = 0;
+        try { onDragEnd && onDragEnd(id); } catch (e) {}
+      },
+    })
+  ).current;
+
+  const toSource = (u) => {
+    try {
+      if (!u || u === 'default_profile_image') return getDefaultProfileImage();
+      if (typeof u === 'string') return { uri: u };
+      if (typeof u === 'object' && typeof u.uri === 'string') return { uri: u.uri };
+      return getDefaultProfileImage();
+    } catch (e) {
+      return getDefaultProfileImage();
+    }
+  };
+
+  const imageSource = toSource(uri);
+  const isBgRemoved = (typeof uri === 'string' && uri.includes('bg_removed'));
+  const resizeMode = isBgRemoved ? 'contain' : 'cover';
+
+  const initialResizeRef = React.useRef({ size: size, cx: 0, cy: 0 });
+  const resizeResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (evt, gestureState) => Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
+      onPanResponderGrant: () => {
+        const s = size || minSize;
+        const startX = translateX.value;
+        const startY = translateY.value;
+        const cx = startX + s / 2;
+        const cy = startY + s / 2;
+        initialResizeRef.current = { size: s, cx, cy };
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        const delta = (gestureState.dx + gestureState.dy) / 2;
+        let proposedSize = initialResizeRef.current.size - delta;
+
+        const padding = BOUND_PADDING;
+        const cx0 = initialResizeRef.current.cx;
+        const cy0 = initialResizeRef.current.cy;
+
+        const minHalf = (minSize || 60) / 2;
+        const cx = Math.max(padding + minHalf, Math.min(containerWidth - padding - minHalf, cx0));
+        const cy = Math.max(padding + minHalf, Math.min(containerHeight - padding - minHalf, cy0));
+
+        const maxHalf = Math.min(
+          (maxSize || 200) / 2,
+          cx - padding,
+          cy - padding,
+          (containerWidth - padding) - cx,
+          (containerHeight - padding) - cy
+        );
+
+        const proposedHalf = proposedSize / 2;
+        const clampedHalf = Math.max(minHalf, Math.min(maxHalf, proposedHalf));
+        const newSize = clampedHalf * 2;
+
+        let newX = cx - clampedHalf;
+        let newY = cy - clampedHalf;
+        const minX = padding;
+        const minY = padding;
+        const maxX = containerWidth - padding - newSize;
+        const maxY = containerHeight - padding - newSize;
+        newX = Math.max(minX, Math.min(maxX, newX));
+        newY = Math.max(minY, Math.min(maxY, newY));
+
+        translateX.value = newX;
+        translateY.value = newY;
+        if (onUpdatePosition) onUpdatePosition(id, newX, newY);
+        if (onUpdateSize) onUpdateSize(id, newSize);
+      },
+      onPanResponderRelease: () => {
+        const padding = BOUND_PADDING;
+        const currSize = typeof size === 'number' ? size : initialResizeRef.current.size;
+        const half = currSize / 2;
+        const currX = translateX.value;
+        const currY = translateY.value;
+        const cx = currX + half;
+        const cy = currY + half;
+        const clampedCx = Math.max(padding + half, Math.min(containerWidth - padding - half, cx));
+        const clampedCy = Math.max(padding + half, Math.min(containerHeight - padding - half, cy));
+        const newX = Math.max(padding, Math.min(containerWidth - padding - currSize, clampedCx - half));
+        const newY = Math.max(padding, Math.min(containerHeight - padding - currSize, clampedCy - half));
+        translateX.value = newX;
+        translateY.value = newY;
+        if (onUpdatePosition) onUpdatePosition(id, newX, newY);
+      },
+      onPanResponderTerminationRequest: () => false,
+    })
+  ).current;
+
+  return (
+    <Reanimated.View
+      style={[
+        {
+          position: 'absolute',
+          width: size,
+          height: size,
+          borderRadius: shape === 'circle' ? size / 2 : 8,
+          borderWidth: focused ? 2 : 0,
+          borderColor: focused ? COLORS.primary : 'transparent',
+        },
+        animatedStyle,
+      ]}
+      {...panResponder.panHandlers}
+    >
+      <TouchableOpacity
+        style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, zIndex: 1 }}
+        activeOpacity={0.9}
+        onPress={() => {
+          if (focused) {
+            onPress && onPress(id);
+          } else {
+            onFocus && onFocus(id);
+          }
+        }}
+      >
+        <Image
+          source={imageSource}
+          style={[
+            { width: '100%', height: '100%', borderRadius: shape === 'circle' ? size / 2 : 8 },
+          ]}
+          resizeMode={resizeMode}
+        />
+      </TouchableOpacity>
+
+      {focused && (
+        <>
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: 30,
+              height: 30,
+              backgroundColor: COLORS.primary,
+              borderRadius: 15,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            {...resizeResponder.panHandlers}
+          >
+            <Text style={{ color: '#fff', fontSize: 16 }}>⤢</Text>
+          </View>
+          <TouchableOpacity
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              width: 30,
+              height: 30,
+              backgroundColor: '#ff0000',
+              borderRadius: 15,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            onPress={() => onDelete && onDelete(id)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={{ color: '#fff', fontSize: 16 }}>✖</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </Reanimated.View>
+  );
+};
+
+const computeContainerDims = (ratioWOverH) => {
+  const aspect = ratioWOverH || (9 / 16);
+  let width, height;
+  if (AVAILABLE_HEIGHT * aspect <= AVAILABLE_WIDTH) {
+    height = AVAILABLE_HEIGHT;
+    width = height * aspect;
+  } else {
+    width = AVAILABLE_WIDTH;
+    height = width / aspect;
+  }
+  const MIN_CONTAINER_WIDTH = 200;
+  const MIN_CONTAINER_HEIGHT = 300;
+  const MAX_CONTAINER_WIDTH = screenWidth * 0.9;
+  const MAX_CONTAINER_HEIGHT = screenHeight * 0.8;
+  
+  width = Math.max(MIN_CONTAINER_WIDTH, Math.min(MAX_CONTAINER_WIDTH, width));
+  height = Math.max(MIN_CONTAINER_HEIGHT, Math.min(MAX_CONTAINER_HEIGHT, height));
+  return { width, height };
+};
+
+const __DEFAULT_DIMS = computeContainerDims(9 / 16);
+const IMAGE_CONTAINER_WIDTH = __DEFAULT_DIMS.width;
+const IMAGE_CONTAINER_HEIGHT = __DEFAULT_DIMS.height;
+
+const UserTemplatesScreen = ({ navigation }) => {
+  const dispatch = useDispatch();
+  const profileImageProcessed = useSelector(selectProfileImage);
+  const profilePictureUri = useSelector(state => state.profilePicture?.profilePictureUri);
+  
+  const [userTemplates, setUserTemplates] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const flatListRef = useRef(null);
+  const viewShotRef = useRef(null);
+  const isDraggingRef = useRef(false);
+
+  // Photo state
+  const [photoState, dispatchPhotoState] = useReducer(photoStateReducer, {
+    photo1Uri: null,
+  });
+  const { photo1Uri } = photoState;
+  const [photo1Size, setPhoto1Size] = useState(100);
+  const [shape, setShape] = useState('square');
+  const [photoElements, setPhotoElements] = useState([]);
+  const [focusedPhotoId, setFocusedPhotoId] = useState(null);
+  const [isPhoto1Visible, setIsPhoto1Visible] = useState(true);
+  const [isPhoto1Focused, setIsPhoto1Focused] = useState(false);
+  const STATIC_PHOTO_ID = 'static-photo-1';
+
+  // Text state
+  const [textElements, setTextElements] = useState([]);
+  const [focusedTextId, setFocusedTextId] = useState(null);
+  const [showTextCustomization, setShowTextCustomization] = useState(false);
+  const [selectedTextId, setSelectedTextId] = useState(null);
+  
+  // Background removal state
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false);
+  const [backgroundRemovalProgress, setBackgroundRemovalProgress] = useState(0);
+  const [backgroundRemovalStatus, setBackgroundRemovalStatus] = useState('');
+  
+  // Container dimensions
+  const [containerWidth, setContainerWidth] = useState(__DEFAULT_DIMS.width);
+  const [containerHeight, setContainerHeight] = useState(__DEFAULT_DIMS.height);
+
+  // Photo position using Reanimated shared values
+  const pan1X = useSharedValue(50);
+  const pan1Y = useSharedValue(50);
+
+  // Load templates when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadTemplates();
+    }, [])
+  );
+
+  const loadTemplates = async () => {
+    try {
+      setIsLoading(true);
+      const templates = await UserTemplatesService.getAllTemplates();
+      setUserTemplates(templates);
+      console.log('✅ Loaded user templates:', templates.length);
+    } catch (error) {
+      console.error('❌ Failed to load user templates:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId) => {
+    Alert.alert(
+      'Delete Template',
+      'Are you sure you want to delete this template?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await UserTemplatesService.deleteTemplate(templateId);
+              await loadTemplates();
+              console.log('✅ Deleted template:', templateId);
+            } catch (error) {
+              console.error('❌ Failed to delete template:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleUseTemplate = (template) => {
+    // Navigate back to HeroScreen with the selected template
+    navigation.navigate('HeroScreen', {
+      image: { uri: template.uri },
+      fromUserTemplates: true,
+    });
+  };
+
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (viewableItems && viewableItems.length > 0) {
+      setCurrentIndex(viewableItems[0].index || 0);
+    }
+  }).current;
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current;
+
+  // Handle swipe gestures
+  const handleSwipeUp = () => {
+    if (currentIndex < userTemplates.length - 1) {
+      flatListRef.current?.scrollToIndex({
+        index: currentIndex + 1,
+        animated: true,
+      });
+    }
+  };
+
+  const handleSwipeDown = () => {
+    if (currentIndex > 0) {
+      flatListRef.current?.scrollToIndex({
+        index: currentIndex - 1,
+        animated: true,
+      });
+    }
+  };
+
+  const renderTemplate = ({ item, index }) => (
+    <View style={styles.templateContainer}>
+      <View style={styles.imageContainerWrapper}>
+        <View style={styles.imageWrapper}>
+          <Image
+            source={{ uri: item.uri }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+        </View>
+      </View>
+
+      {/* Action buttons overlay */}
+      <View style={styles.actionsOverlay}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => handleUseTemplate(item)}
+        >
+          <Feather name="check-circle" size={24} color="#fff" />
+          <Text style={styles.actionButtonText}>Use Template</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionButton, styles.deleteButton]}
+          onPress={() => handleDeleteTemplate(item.id)}
+        >
+          <Feather name="trash-2" size={24} color="#fff" />
+          <Text style={styles.actionButtonText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Template counter */}
+      <View style={styles.counterContainer}>
+        <Text style={styles.counterText}>
+          {index + 1} / {userTemplates.length}
+        </Text>
+      </View>
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <CustomHeader
+          title="Your Templates"
+          backgroundColor={COLORS.primary}
+          titleColor={COLORS.white}
+          showBackButton={true}
+          onBackPress={() => navigation.goBack()}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading templates...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (userTemplates.length === 0) {
+    return (
+      <View style={styles.container}>
+        <CustomHeader
+          title="Your Templates"
+          backgroundColor={COLORS.primary}
+          titleColor={COLORS.white}
+          showBackButton={true}
+          onBackPress={() => navigation.goBack()}
+        />
+        <View style={styles.emptyContainer}>
+          <Feather name="image" size={64} color="#ccc" />
+          <Text style={styles.emptyTitle}>No Templates Yet</Text>
+          <Text style={styles.emptyText}>
+            Create custom templates by using the Template button in the menu bar
+          </Text>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.createButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <CustomHeader
+        title="Your Templates"
+        backgroundColor={COLORS.primary}
+        titleColor={COLORS.white}
+        showBackButton={true}
+        onBackPress={() => navigation.goBack()}
+      />
+
+      <FlingGestureHandler
+        direction={Directions.UP}
+        onHandlerStateChange={({ nativeEvent }) => {
+          if (nativeEvent.state === State.ACTIVE) {
+            handleSwipeUp();
+          }
+        }}
+      >
+        <FlingGestureHandler
+          direction={Directions.DOWN}
+          onHandlerStateChange={({ nativeEvent }) => {
+            if (nativeEvent.state === State.ACTIVE) {
+              handleSwipeDown();
+            }
+          }}
+        >
+          <View style={styles.content}>
+            <FlatList
+              ref={flatListRef}
+              data={userTemplates}
+              renderItem={renderTemplate}
+              keyExtractor={(item) => item.id}
+              pagingEnabled
+              showsVerticalScrollIndicator={false}
+              snapToInterval={screenHeight}
+              decelerationRate="fast"
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              getItemLayout={(data, index) => ({
+                length: screenHeight,
+                offset: screenHeight * index,
+                index,
+              })}
+            />
+          </View>
+        </FlingGestureHandler>
+      </FlingGestureHandler>
+    </View>
+  );
+};
+
+export default UserTemplatesScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  content: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 24,
+  },
+  createButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  templateContainer: {
+    height: screenHeight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: CONTAINER_PADDING,
+    paddingTop: 20,
+    paddingBottom: MENU_BAR_HEIGHT + 8,
+  },
+  imageContainerWrapper: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: IMAGE_CONTAINER_WIDTH,
+    height: IMAGE_CONTAINER_HEIGHT,
+    borderRadius: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  imageWrapper: {
+    width: IMAGE_CONTAINER_WIDTH,
+    height: IMAGE_CONTAINER_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    backgroundColor: '#FFA500',
+    borderRadius: 15,
+    position: 'relative',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  actionsOverlay: {
+    position: 'absolute',
+    right: 20,
+    top: '50%',
+    transform: [{ translateY: -80 }],
+    alignItems: 'center',
+    gap: 20,
+  },
+  actionButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 30,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(255, 0, 0, 0.7)',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  counterContainer: {
+    position: 'absolute',
+    bottom: MENU_BAR_HEIGHT + 20,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  counterText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+});

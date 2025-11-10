@@ -50,6 +50,8 @@ const CustomAlert = ({ visible, title, message, buttons = [], onDismiss }) => {
                       styles.buttonText,
                       (isCancel || isDestructive) && styles.cancelButtonText,
                     ]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
                   >
                     {button.text}
                   </Text>
@@ -97,12 +99,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     gap: 10,
   },
   button: {
-    flex: 1,
+    width: '100%',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -112,7 +113,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   singleButton: {
-    flex: 1,
+    width: '100%',
   },
   cancelButton: {
     backgroundColor: '#ff0000',
