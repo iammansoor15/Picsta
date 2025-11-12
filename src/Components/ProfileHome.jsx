@@ -3,6 +3,7 @@ import { SafeAreaView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicat
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthService from '../services/AuthService';
 import TemplatePreferences from '../services/TemplatePreferences';
+import PaymentService from '../services/PaymentService';
 
 const TOKEN_KEY = 'AUTH_TOKEN';
 
@@ -10,6 +11,7 @@ export default function ProfileHome({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [selectedReligions, setSelectedReligions] = useState(['hindu']);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const RELIGIONS = [
     { key: 'all', label: 'All' },
     { key: 'hindu', label: 'Hindu' },
@@ -64,6 +66,44 @@ export default function ProfileHome({ navigation }) {
       try { navigation.goBack(); } catch {}
     } catch (e) {
       Alert.alert('Error', 'Failed to save preferences.');
+    }
+  };
+
+  const testPayment = async () => {
+    try {
+      setPaymentLoading(true);
+      
+      // Test payment of ₹1
+      const result = await PaymentService.processPayment(
+        1, // Amount in rupees
+        {
+          name: user?.name,
+          email: user?.email,
+          phone: user?.phone,
+        },
+        {
+          description: 'Test Payment',
+          test: true,
+        }
+      );
+
+      Alert.alert(
+        'Payment Successful! 🎉',
+        `Transaction ID: ${result.transactionId}\nAmount: ₹${result.amount / 100}\nStatus: ${result.status}`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Test payment error:', error);
+      const errorMsg = error.message || 'Payment failed';
+      
+      // User cancelled payment
+      if (errorMsg.includes('cancel') || error.code === 2) {
+        Alert.alert('Payment Cancelled', 'You cancelled the payment.');
+      } else {
+        Alert.alert('Payment Failed', errorMsg);
+      }
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -128,6 +168,18 @@ export default function ProfileHome({ navigation }) {
               <Text style={styles.saveText}>Save</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity 
+              onPress={testPayment} 
+              style={[styles.testPaymentBtn, paymentLoading && styles.btnDisabled]}
+              disabled={paymentLoading}
+            >
+              {paymentLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.testPaymentText}>Test Payment (₹1)</Text>
+              )}
+            </TouchableOpacity>
+
             <TouchableOpacity onPress={logout} style={styles.logoutBtn}>
               <Text style={styles.logoutText}>Log out</Text>
             </TouchableOpacity>
@@ -171,4 +223,7 @@ const styles = StyleSheet.create({
   checkboxLabel: { fontSize: 16, color: '#333' },
   saveBtn: { marginTop: 12, backgroundColor: '#007AFF', padding: 14, borderRadius: 8, alignItems: 'center' },
   saveText: { color: '#fff', fontWeight: '600' },
+  testPaymentBtn: { marginTop: 12, backgroundColor: '#10B981', padding: 14, borderRadius: 8, alignItems: 'center' },
+  testPaymentText: { color: '#fff', fontWeight: '600' },
+  btnDisabled: { opacity: 0.6 },
 });

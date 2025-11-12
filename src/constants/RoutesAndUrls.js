@@ -26,6 +26,11 @@ export const ENDPOINTS = {
   PROCESS: '/process',
   BATCH_PROCESS: '/process-batch',
   TEMPLATES: '/api/templates',
+  PAYMENTS: {
+    CREATE_ORDER: '/api/payments/create-order',
+    VERIFY_PAYMENT: '/api/payments/verify-payment',
+    TRANSACTIONS: '/api/payments/transactions',
+  },
 };
 
 // Aggregate APIs in one export if consumers want a single import

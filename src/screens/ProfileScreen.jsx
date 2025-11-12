@@ -45,6 +45,7 @@ import { DEFAULT_PROFILE_PICTURE, DEFAULT_PROFILE_PICTURE_FALLBACK, DEFAULT_PROF
 import { clearAllProfilePictures, clearAllProfileData } from '../utils/ProfilePictureManager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TemplatePreferences from '../services/TemplatePreferences';
+import PaymentService from '../services/PaymentService';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -87,6 +88,10 @@ const ProfileScreen = () => {
   const SUBCATEGORIES = ['congratulations', 'birthday', 'anniversary', 'wedding', 'festival'];
   const [selectedReligions, setSelectedReligions] = useState(['hindu']);
   const [prefSubcategory, setPrefSubcategory] = useState(SUBCATEGORIES[0]);
+  
+  // Payment state
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentProcessing, setPaymentProcessing] = useState(false); // Verification overlay
 
   // Debug: Log profile picture information
   console.log('📷 ProfileScreen: Profile picture from Redux:', profilePicture);
@@ -757,6 +762,99 @@ const ProfileScreen = () => {
     });
   };
 
+  const testPayment = async () => {
+    try {
+      console.log('\n' + '='.repeat(60));
+      console.log('🟢 [PROFILE SCREEN] Test Payment Button Clicked');
+      console.log('='.repeat(60));
+      console.log('👤 User Name:', userName);
+      console.log('🕒 Timestamp:', new Date().toISOString());
+      
+      setPaymentLoading(true);
+      console.log('⏳ [PROFILE SCREEN] Payment loading state: true');
+      
+      // Test payment of ₹1
+      console.log('\n💸 [PROFILE SCREEN] Initiating PaymentService.processPayment()');
+      
+      const result = await PaymentService.processPayment(
+        1, // Amount in rupees
+        {
+          name: userName,
+          email: '',
+          phone: '',
+        },
+        {
+          description: 'Test Payment',
+          test: true,
+        },
+        {
+          onVerifyStart: () => {
+            console.log('🛡️ [PROFILE SCREEN] onVerifyStart -> showing verification overlay');
+            setPaymentProcessing(true);
+          },
+        }
+      );
+
+      // Payment successful! Show success message
+      console.log('\n🎉 [PROFILE SCREEN] Payment flow completed successfully!');
+      console.log('📊 [PROFILE SCREEN] Result:', JSON.stringify(result, null, 2));
+      console.log('✅ [PROFILE SCREEN] Transaction ID:', result.transactionId);
+      console.log('✅ [PROFILE SCREEN] Amount:', result.amount / 100, 'rupees');
+      console.log('✅ [PROFILE SCREEN] Status:', result.status);
+      console.log('\n⏰ [PROFILE SCREEN] Waiting before showing success alert...');
+      
+      // Small delay then show success
+      setTimeout(() => {
+        setPaymentProcessing(false); // Hide overlay
+        console.log('🔔 [PROFILE SCREEN] Showing success alert to user');
+        setAlertConfig({
+          visible: true,
+          title: 'Payment Successful! 🎉',
+          message: `Transaction ID: ${result.transactionId}\nAmount: ₹${result.amount / 100}\nStatus: ${result.status}`,
+          buttons: [{ text: 'OK' }]
+        });
+        console.log('✅ [PROFILE SCREEN] Success alert displayed');
+        console.log('='.repeat(60) + '\n');
+      }, 300);
+    } catch (error) {
+      console.error('\n❌ [PROFILE SCREEN] Payment error occurred!');
+      console.error('🔴 [PROFILE SCREEN] Error type:', error.constructor.name);
+      console.error('🔴 [PROFILE SCREEN] Error message:', error.message);
+      console.error('🔴 [PROFILE SCREEN] Error code:', error.code);
+      console.error('🔴 [PROFILE SCREEN] Full error:', JSON.stringify(error, null, 2));
+      
+      setPaymentProcessing(false); // Hide overlay on error
+      const errorMsg = error.message || 'Payment failed';
+      
+      // User cancelled payment
+      if (errorMsg.includes('cancel') || error.code === 2) {
+        setAlertConfig({
+          visible: true,
+          title: 'Payment Cancelled',
+          message: 'You cancelled the payment.',
+          buttons: [{ text: 'OK' }]
+        });
+      // Server configuration error
+      } else if (errorMsg.includes('unavailable') || errorMsg.includes('server configuration')) {
+        setAlertConfig({
+          visible: true,
+          title: 'Service Unavailable',
+          message: 'Payment service is currently unavailable. Please ensure the server is running and properly configured.\n\nError: ' + errorMsg,
+          buttons: [{ text: 'OK' }]
+        });
+      } else {
+        setAlertConfig({
+          visible: true,
+          title: 'Payment Failed',
+          message: errorMsg,
+          buttons: [{ text: 'OK' }]
+        });
+      }
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     setAlertConfig({
       visible: true,
@@ -994,6 +1092,21 @@ const ProfileScreen = () => {
 
         </View>
 
+        {/* Test Payment Button */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.testPaymentButton, paymentLoading && styles.buttonDisabled]}
+            onPress={testPayment}
+            disabled={paymentLoading}
+            activeOpacity={0.8}
+          >
+            {paymentLoading ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <Text style={styles.testPaymentButtonText}>Test Payment (₹1)</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* Update Button - Show only when there are changes */}
         {hasChanges && (
@@ -1083,6 +1196,23 @@ const ProfileScreen = () => {
         buttons={alertConfig.buttons}
         onDismiss={() => setAlertConfig({ ...alertConfig, visible: false })}
       />
+
+      {/* Payment Processing Overlay - Covers Razorpay error screen */}
+      <Modal
+        visible={paymentProcessing}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.paymentProcessingOverlay}>
+          <View style={styles.paymentProcessingCard}>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.paymentProcessingTitle}>Verifying Payment</Text>
+            <Text style={styles.paymentProcessingText}>
+              Please wait while we confirm your transaction...
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1248,6 +1378,26 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
+  },
+  testPaymentButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  testPaymentButtonText: {
+    ...TYPOGRAPHY.bodyLarge,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   logoutButton: {
     alignItems: 'center',
@@ -1422,6 +1572,38 @@ const styles = StyleSheet.create({
   bannerUploadedText: {
     color: COLORS.white,
     fontSize: 12,
+  },
+  // Payment processing overlay styles
+  paymentProcessingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentProcessingCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    minWidth: 260,
+    elevation: 10,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  paymentProcessingTitle: {
+    ...TYPOGRAPHY.h3,
+    fontWeight: '700',
+    color: '#10B981',
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  paymentProcessingText: {
+    ...TYPOGRAPHY.bodyMedium,
+    color: COLORS.gray,
+    textAlign: 'center',
+    lineHeight: 20,
     fontWeight: '700',
   },
 
