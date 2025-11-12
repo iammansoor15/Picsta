@@ -23,6 +23,7 @@ import { testProfilePictureState } from '../utils/profilePictureTest';
 import UserAssetsService from '../services/UserAssetsService';
 import NavigationService from '../services/NavigationService';
 import AuthService from '../services/AuthService';
+import SubscriptionService from '../services/SubscriptionService';
 import ProfilePictureStorageService from '../services/ProfilePictureStorageService';
 import BackgroundRemovalService from '../services/BackgroundRemovalService';
 import { 
@@ -89,9 +90,8 @@ const ProfileScreen = () => {
   const [selectedReligions, setSelectedReligions] = useState(['hindu']);
   const [prefSubcategory, setPrefSubcategory] = useState(SUBCATEGORIES[0]);
   
-  // Payment state
-  const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentProcessing, setPaymentProcessing] = useState(false); // Verification overlay
+  // Payment processing state (kept for future subscription flow)
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
 
   // Debug: Log profile picture information
   console.log('📷 ProfileScreen: Profile picture from Redux:', profilePicture);
@@ -886,7 +886,11 @@ const ProfileScreen = () => {
               // 2) Clear user-related local data (profile pics and caches)
               await clearAllProfileData(dispatch);
 
-              // 3) Optionally clear any other auth-related caches here in future (user profile, etc.)
+              // 3) Clear subscription cache
+              await SubscriptionService.clearCache();
+              console.log('🔐 Subscription cache cleared');
+
+              // 4) Optionally clear any other auth-related caches here in future (user profile, etc.)
 
             } catch (e) {
               console.warn('Logout cleanup error:', e?.message || e);
@@ -1090,22 +1094,6 @@ const ProfileScreen = () => {
             <Text style={styles.updateButtonText}>Save Preferences</Text>
           </TouchableOpacity>
 
-        </View>
-
-        {/* Test Payment Button */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.testPaymentButton, paymentLoading && styles.buttonDisabled]}
-            onPress={testPayment}
-            disabled={paymentLoading}
-            activeOpacity={0.8}
-          >
-            {paymentLoading ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <Text style={styles.testPaymentButtonText}>Test Payment (₹1)</Text>
-            )}
-          </TouchableOpacity>
         </View>
 
         {/* Update Button - Show only when there are changes */}

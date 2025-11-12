@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Image, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import SubscriptionService from '../services/SubscriptionService';
 import Logo from '../../assets/PicStar_logo.png';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
 
@@ -30,8 +31,16 @@ const SplashScreen = () => {
       try {
         const authToken = await AsyncStorage.getItem('authToken');
         if (authToken) {
-          // User is authenticated, go to main app
-          navigation.replace('HeroScreen');
+          // User is authenticated, check subscription status
+          const subscription = await SubscriptionService.checkSubscriptionStatus();
+          
+          if (subscription.active) {
+            // User has active subscription, go to main app
+            navigation.replace('HeroScreen');
+          } else {
+            // User needs to purchase subscription
+            navigation.replace('SubscriptionGate');
+          }
         } else {
           // No authentication, go to OTP registration
           navigation.replace('RegisterWithOTP');

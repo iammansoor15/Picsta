@@ -22,6 +22,7 @@ import BannerCreate from './src/Components/BannerCreate';
 import UserBannersScreen from './src/screens/UserBannersScreen';
 import UserTemplatesScreen from './src/screens/UserTemplatesScreen';
 import RegisterWithOTP from './src/screens/RegisterWithOTP';
+import SubscriptionGate from './src/screens/SubscriptionGate';
 import CustomHeader from './src/Components/CustomHeader';
 import NavigationService from './src/services/NavigationService';
 import ReduxInitializer from './src/Components/ReduxInitializer';
@@ -126,6 +127,17 @@ export default function App() {
               component={RegisterWithOTP}
               options={{
                 headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
+
+            {/* Subscription Gate */}
+            <Stack.Screen 
+              name="SubscriptionGate" 
+              component={SubscriptionGate}
+              options={{
+                headerShown: false,
+                gestureEnabled: false, // Prevent back swipe
                 animation: 'slide_from_right',
               }}
             />

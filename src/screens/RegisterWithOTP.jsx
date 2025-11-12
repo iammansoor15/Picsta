@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthService from '../services/AuthService';
+import SubscriptionService from '../services/SubscriptionService';
 import { COLORS } from '../theme/colors';
 
 const RegisterWithOTP = ({ navigation }) => {
@@ -110,14 +111,18 @@ const RegisterWithOTP = ({ navigation }) => {
           await AsyncStorage.setItem('user', JSON.stringify(result.user));
         }
 
-        // Navigate directly to HeroScreen
+        // Check subscription status
+        const subscription = await SubscriptionService.checkSubscriptionStatus();
+        
+        // Navigate based on subscription status
+        const targetScreen = subscription.active ? 'HeroScreen' : 'SubscriptionGate';
         Alert.alert('Welcome Back!', 'You have been signed in successfully.', [
           {
             text: 'OK',
             onPress: () => {
               navigation.reset({
                 index: 0,
-                routes: [{ name: 'HeroScreen' }],
+                routes: [{ name: targetScreen }],
               });
             },
           },
@@ -162,14 +167,18 @@ const RegisterWithOTP = ({ navigation }) => {
         await AsyncStorage.setItem('user', JSON.stringify(result.user));
       }
 
+      // Check subscription status
+      const subscription = await SubscriptionService.checkSubscriptionStatus();
+      
+      // Navigate based on subscription status
+      const targetScreen = subscription.active ? 'HeroScreen' : 'SubscriptionGate';
       Alert.alert('Success', 'Registration completed successfully!', [
         {
           text: 'OK',
           onPress: () => {
-            // Navigate to main app screen
             navigation.reset({
               index: 0,
-              routes: [{ name: 'HeroScreen' }],
+              routes: [{ name: targetScreen }],
             });
           },
         },
