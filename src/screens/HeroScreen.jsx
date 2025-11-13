@@ -743,6 +743,8 @@ const HeroScreen = ({ route, navigation }) => {
 // Selected category for filtering templates
   const [selectedCategory, setSelectedCategory] = useState(null); // Start with null to allow proper initialization
   const [isHeroLoading, setIsHeroLoading] = useState(false);
+  const [isProcessingVideo, setIsProcessingVideo] = useState(false);
+  const [videoProcessingStatus, setVideoProcessingStatus] = useState('');
 
   // Custom alert state
   const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', buttons: [] });
@@ -3138,8 +3140,14 @@ React.useEffect(() => {
             text: String(t.text || ''),
             x: Math.round(t.x || 0),
             y: Math.round(t.y || 0),
+            width: Math.round(t.width || 120),
+            height: Math.round(t.height || 40),
             fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.8))),
-            color: t.color || '#FFFFFF'
+            color: t.color || '#FFFFFF',
+            fontWeight: t.fontWeight || 'normal',
+            fontFamily: t.fontFamily || null,
+            textAlign: t.textAlign || 'center',
+            backgroundColor: t.backgroundColor || 'transparent'
           })) : [];
 
           const effectiveBannerUri = bannerEnabled && bannerUri ? bannerUri : null;
@@ -3147,8 +3155,11 @@ React.useEffect(() => {
           const hasOverlays = (photos && photos.length) || (texts && texts.length) || !!effectiveBannerUri;
 
           if (hasOverlays) {
-            console.log('🎬 Compositing video with overlays before saving...', { photos: photos.length, texts: texts.length, hasBanner: !!effectiveBannerUri });
-            const compositedPath = await VideoCompositeService.compositeVideo({
+            console.log('🎬 Processing video with overlays via backend...');
+            setIsProcessingVideo(true);
+            setVideoProcessingStatus('Saving video with overlays...');
+            try {
+              const compositedPath = await VideoCompositeService.compositeVideo({
               videoUrl,
               photos,
               texts,
@@ -3157,10 +3168,14 @@ React.useEffect(() => {
               containerHeight: Math.round(containerHeight),
             });
 
-            const savedUri = await CameraRoll.save(compositedPath, { type: 'video', album: 'Narayana Templates' });
-            try { setSavedTemplateUri(savedUri); } catch (e) {}
-            Alert.alert('Success! 🎥', 'Your edited video has been saved to the Narayana Templates album.', [{ text: 'Great!' }]);
-            return savedUri;
+              const savedUri = await CameraRoll.save(compositedPath, { type: 'video', album: 'Narayana Templates' });
+              try { setSavedTemplateUri(savedUri); } catch (e) {}
+              Alert.alert('Success! 🎥', 'Your edited video has been saved to the Narayana Templates album.', [{ text: 'Great!' }]);
+              return savedUri;
+            } finally {
+              setIsProcessingVideo(false);
+              setVideoProcessingStatus('');
+            }
           } else {
             // No overlays → fallback to saving original video
             console.log('ℹ️ No overlays detected, saving original video.');
@@ -3307,23 +3322,36 @@ React.useEffect(() => {
             text: String(t.text || ''),
             x: Math.round(t.x || 0),
             y: Math.round(t.y || 0),
+            width: Math.round(t.width || 120),
+            height: Math.round(t.height || 40),
             fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.8))),
-            color: t.color || '#FFFFFF'
+            color: t.color || '#FFFFFF',
+            fontWeight: t.fontWeight || 'normal',
+            fontFamily: t.fontFamily || null,
+            textAlign: t.textAlign || 'center',
+            backgroundColor: t.backgroundColor || 'transparent'
           })) : [];
           const effectiveBannerUri = bannerEnabled && bannerUri ? bannerUri : null;
           const hasOverlays = (photos && photos.length) || (texts && texts.length) || !!effectiveBannerUri;
 
           let sharePath;
           if (hasOverlays) {
-            console.log('🎬 Compositing video with overlays before sharing...', { photos: photos.length, texts: texts.length, hasBanner: !!effectiveBannerUri });
-            sharePath = await VideoCompositeService.compositeVideo({
-              videoUrl,
-              photos,
-              texts,
-              bannerUri: effectiveBannerUri,
-              containerWidth: Math.round(containerWidth),
-              containerHeight: Math.round(containerHeight),
-            });
+            console.log('🎬 Processing video with overlays via backend for sharing...');
+            setIsProcessingVideo(true);
+            setVideoProcessingStatus('Processing video with overlays...');
+            try {
+              sharePath = await VideoCompositeService.compositeVideo({
+                videoUrl,
+                photos,
+                texts,
+                bannerUri: effectiveBannerUri,
+                containerWidth: Math.round(containerWidth),
+                containerHeight: Math.round(containerHeight),
+              });
+            } finally {
+              setIsProcessingVideo(false);
+              setVideoProcessingStatus('');
+            }
           } else {
             // Fallback to original video
             const RNFS = require('react-native-fs');
@@ -4679,7 +4707,10 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
           </View>
 
           {/* Draggable Text Elements - Positioned within image container for seamless overlay */}
-          <View style={[styles.textElementsContainer, { width: containerWidth, height: containerHeight }]}>
+          <View 
+            style={[styles.textElementsContainer, { width: containerWidth, height: containerHeight }]}
+            pointerEvents="box-none"
+          >
             {textElements.map(textElement => {
               return (
               <DraggableText
@@ -4712,6 +4743,22 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
             })}
           </View>
           
+          {/* Unfocus overlay - captures background taps when any container is focused */}
+          {(focusedTextId || focusedPhotoId || isPhoto1Focused || isBannerFocused) && (
+            <TouchableOpacity
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: containerWidth,
+                height: containerHeight,
+                zIndex: 1,
+              }}
+              activeOpacity={1}
+              onPress={handleBackgroundPress}
+            />
+          )}
+
           {/* Dynamic Photo Elements - Positioned within image container */}
           <View style={[styles.photoElementsContainer, { width: containerWidth, height: containerHeight }]}>
             {photoElements.map(photoElement => {
@@ -4899,6 +4946,18 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
       </View>
     )}
 
+    {isProcessingVideo && (
+      <View style={styles.processingOverlay}>
+        <View style={styles.processingContent}>
+          <ActivityIndicator size="large" color="#007AFF" style={{ marginBottom: 15 }} />
+          <Text style={styles.processingTitle}>Processing Video</Text>
+          <Text style={styles.processingStatus}>{videoProcessingStatus}</Text>
+          <Text style={{color: '#aaa', fontSize: 12, marginTop: 10, textAlign: 'center'}}>
+            This may take a moment...{"\n"}Please wait
+          </Text>
+        </View>
+      </View>
+    )}
 
     {/* Custom Alert */}
     <CustomAlert

@@ -1,5 +1,5 @@
 const AppConfig = {
-  PRODUCTION_SERVER_URL: 'http://31.97.233.69:10000',
+  PRODUCTION_SERVER_URL: 'http://192.168.1.36:10000',
   // Optional separate auth API URL (production)
   PRODUCTION_AUTH_SERVER_URL: null,
   
@@ -19,8 +19,8 @@ const AppConfig = {
     ENABLE_LOGGING: true,
     SHOW_SERVER_CONFIG: true, // Enable manual server config for debugging
 
-    // Using production server URL for development
-    DEV_SERVER_URL: 'http://31.97.233.69:10000', // Production server
+    // Using local server URL for development (wireless debugging)
+    DEV_SERVER_URL: 'http://192.168.1.36:10000', // Local development server
     DEV_AUTH_SERVER_URL: null,
 
     // Allow production fallback

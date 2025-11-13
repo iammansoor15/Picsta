@@ -1,205 +1,267 @@
-import { FFmpegKit, ReturnCode } from 'ffmpeg-kit-react-native';
 import RNFS from 'react-native-fs';
+import AppConfig from '../config/AppConfig';
 
 /**
  * Video Composite Service
- * Uses FFmpeg to overlay user photos and text onto video templates
+ * Processes video with overlays using backend FFmpeg service.
  */
 class VideoCompositeService {
   /**
-   * Composite user photos and text onto a video template
-   * @param {Object} options - Composite options
-   * @param {string} options.videoUrl - URL of the video template
-   * @param {Array} options.photos - Array of photo objects {uri, x, y, width, height}
-   * @param {Array} options.texts - Array of text objects {text, x, y, fontSize, color}
-   * @param {string} options.bannerUri - Optional banner image URI
-   * @param {number} options.containerWidth - Template container width
-   * @param {number} options.containerHeight - Template container height
-   * @returns {Promise<string>} Path to the output video file
+   * Record video with overlays by capturing frames
+   * @param {Object} options - Recording options
+   * @param {Function} options.captureCallback - ViewShot capture function
+   * @param {Function} options.getVideoRef - Function to get video player ref
+   * @param {number} options.videoDuration - Video duration in seconds
+   * @param {number} options.fps - Frames per second to capture (default: 10)
+   * @returns {Promise<Array>} Array of captured frame paths
+   */
+  async recordVideoFrames(options) {
+    const { 
+      captureCallback, 
+      getVideoRef, 
+      videoDuration = 5,
+      fps = 10 
+    } = options;
+
+    console.log('🎬 Recording video with overlays...', { duration: videoDuration, fps });
+
+    try {
+      if (!captureCallback) {
+        throw new Error('Capture callback not provided');
+      }
+
+      if (!getVideoRef || !getVideoRef()) {
+        throw new Error('Video ref not available');
+      }
+
+      const videoRef = getVideoRef();
+      const framePaths = [];
+      const frameInterval = 1000 / fps; // milliseconds between frames
+      const totalFrames = Math.ceil(videoDuration * fps);
+
+      console.log(`🎬 Will capture ${totalFrames} frames at ${fps} fps`);
+
+      // Seek to start and play
+      videoRef.seek(0);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Capture frames while video plays
+      for (let i = 0; i < totalFrames; i++) {
+        const currentTime = i / fps;
+        
+        // Seek to exact frame
+        videoRef.seek(currentTime);
+        await new Promise(resolve => setTimeout(resolve, 100)); // Wait for seek
+
+        // Capture this frame
+        const framePath = await captureCallback();
+        framePaths.push(framePath);
+        
+        console.log(`📸 Captured frame ${i + 1}/${totalFrames} at ${currentTime.toFixed(2)}s`);
+      }
+
+      console.log(`✅ Recorded ${framePaths.length} frames`);
+      return framePaths;
+
+    } catch (error) {
+      console.error('❌ Video recording error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Stitch captured frames into a video
+   * NOTE: This requires FFmpeg or a video encoding library.
+   * For now, this returns the frame paths and shows instructions.
+   */
+  async stitchFramesToVideo(framePaths, outputPath, fps = 10) {
+    console.warn('⚠️ Video stitching requires FFmpeg or similar tool.');
+    console.log('Frame paths saved for manual stitching:', framePaths);
+    
+    // Save frame paths to a file for reference
+    const frameListPath = `${RNFS.DocumentDirectoryPath}/frames_${Date.now()}.json`;
+    await RNFS.writeFile(frameListPath, JSON.stringify(framePaths, null, 2));
+    
+    throw new Error(
+      'Video stitching not yet implemented. ' +
+      `${framePaths.length} frames captured and saved. ` +
+      'Frame list saved at: ' + frameListPath
+    );
+  }
+
+  /**
+   * Composite video with overlays using backend processing
    */
   async compositeVideo(options) {
+    const startTime = Date.now();
+    const requestId = `app_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    
     const {
       videoUrl,
       photos = [],
       texts = [],
       bannerUri = null,
       containerWidth,
-      containerHeight,
+      containerHeight
     } = options;
 
+    console.log('\n' + '='.repeat(60));
+    console.log(`🎬 [${requestId}] VIDEO COMPOSITE REQUEST`);
+    console.log('='.repeat(60));
+    console.log(`📋 Request details:`);
+    console.log(`   Video: ${videoUrl?.substring(0, 60)}...`);
+    console.log(`   Photos: ${photos.length}`);
+    console.log(`   Texts: ${texts.length}`);
+    console.log(`   Banner: ${bannerUri ? 'Yes' : 'No'}`);
+    console.log(`   Dimensions: ${containerWidth}x${containerHeight}`);
+
     try {
-      console.log('🎬 Starting video composite:', {
-        videoUrl: videoUrl?.substring(0, 60),
-        photosCount: photos.length,
-        textsCount: texts.length,
-        hasBanner: !!bannerUri,
-        dimensions: `${containerWidth}x${containerHeight}`
+      // Send request to backend for video processing
+      const backendUrl = this.getBackendUrl();
+      const endpoint = `${backendUrl}/api/videos/composite`;
+
+      console.log(`\n📤 [${requestId}] Sending request to backend...`);
+      console.log(`   Endpoint: ${endpoint}`);
+
+      const fetchStart = Date.now();
+      
+      const payload = {
+        videoUrl,
+        overlays: {
+          photos: photos.map(p => ({
+            uri: p.uri,
+            x: Math.round(p.x || 0),
+            y: Math.round(p.y || 0),
+            width: Math.round(p.width || 0),
+            height: Math.round(p.height || 0)
+          })),
+          texts: texts.map(t => ({
+            text: t.text,
+            x: Math.round(t.x || 0),
+            y: Math.round(t.y || 0),
+            fontSize: t.fontSize || 24,
+            color: t.color || '#FFFFFF'
+          })),
+          banner: bannerUri ? { uri: bannerUri } : null
+        },
+        dimensions: {
+          width: Math.round(containerWidth),
+          height: Math.round(containerHeight)
+        }
+      };
+      
+      console.log(`   Payload size: ${JSON.stringify(payload).length} bytes`);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
       });
 
-      // Step 1: Download the video template to temp storage
+      const fetchTime = Date.now() - fetchStart;
+      console.log(`✅ [${requestId}] Backend responded in ${fetchTime}ms with status ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ [${requestId}] Backend error:`, errorText);
+        throw new Error(`Backend error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const processedVideoUrl = result.videoUrl || result.url;
+      const backendProcessingTime = result.processingTime;
+
+      if (!processedVideoUrl) {
+        throw new Error('Backend did not return processed video URL');
+      }
+
+      console.log(`\n📥 [${requestId}] Downloading processed video...`);
+      console.log(`   Backend processing: ${backendProcessingTime}ms`);
+      console.log(`   URL: ${processedVideoUrl.substring(0, 60)}...`);
+
+      // Download the processed video
       const timestamp = Date.now();
-      const tempVideoPath = `${RNFS.CachesDirectoryPath}/template_${timestamp}.mp4`;
-      
-      console.log('📥 Downloading template video...');
+      const outputPath = `${RNFS.DocumentDirectoryPath}/composite_${timestamp}.mp4`;
+
+      const downloadStart = Date.now();
+      console.log(`   Downloading to: ${outputPath}`);
+
       const downloadResult = await RNFS.downloadFile({
-        fromUrl: videoUrl,
-        toFile: tempVideoPath,
+        fromUrl: processedVideoUrl,
+        toFile: outputPath,
       }).promise;
 
       if (downloadResult.statusCode !== 200) {
-        throw new Error(`Failed to download video: ${downloadResult.statusCode}`);
+        console.error(`❌ [${requestId}] Download failed with status ${downloadResult.statusCode}`);
+        throw new Error(`Download failed: ${downloadResult.statusCode}`);
       }
 
-      console.log('✅ Video downloaded:', tempVideoPath);
-
-      // Step 2: Build FFmpeg filter complex command
-      const outputPath = `${RNFS.DocumentDirectoryPath}/output_${timestamp}.mp4`;
-      let filterComplex = [];
-      let inputFiles = ['-i', tempVideoPath];
-      let inputIndex = 1; // Start from 1 (0 is the video)
-
-      // Add photo inputs
-      const photoInputs = [];
-      for (let i = 0; i < photos.length; i++) {
-        const photo = photos[i];
-        if (photo.uri) {
-          const photoPath = photo.uri.replace('file://', '');
-          inputFiles.push('-i', photoPath);
-          photoInputs.push({ index: inputIndex++, ...photo });
-        }
-      }
-
-      // Add banner input
-      let bannerIndex = -1;
-      if (bannerUri) {
-        const bannerPath = bannerUri.replace('file://', '');
-        inputFiles.push('-i', bannerPath);
-        bannerIndex = inputIndex++;
-      }
-
-      // Build filter complex string
-      let previousOutput = '[0:v]';
-
-      // Overlay photos
-      for (let i = 0; i < photoInputs.length; i++) {
-        const photo = photoInputs[i];
-        const inputIdx = photo.index;
-        const outputName = i === photoInputs.length - 1 && !bannerUri ? 'out' : `tmp${i}`;
-        
-        // Scale and position the photo
-        // FFmpeg overlay syntax: [background][overlay]overlay=x:y[output]
-        const scaleFilter = `[${inputIdx}:v]scale=${photo.width}:${photo.height}[scaled${i}]`;
-        const overlayFilter = `${previousOutput}[scaled${i}]overlay=${photo.x}:${photo.y}[${outputName}]`;
-        
-        filterComplex.push(scaleFilter);
-        filterComplex.push(overlayFilter);
-        previousOutput = `[${outputName}]`;
-      }
-
-      // Overlay banner
-      if (bannerIndex >= 0) {
-        const bannerWidth = containerWidth;
-        const bannerHeight = Math.floor(containerWidth / 5); // 5:1 aspect ratio
-        
-        const scaleFilter = `[${bannerIndex}:v]scale=${bannerWidth}:${bannerHeight}[scaled_banner]`;
-        const overlayFilter = `${previousOutput}[scaled_banner]overlay=0:0[out]`;
-        
-        filterComplex.push(scaleFilter);
-        filterComplex.push(overlayFilter);
-      }
-
-      // Add text overlays using drawtext filter
-      if (texts.length > 0) {
-        const textFilters = texts.map((text, i) => {
-          const escapedText = text.text.replace(/'/g, "\\\\'").replace(/:/g, '\\\\:');
-          const color = text.color || '#FFFFFF';
-          const fontSize = text.fontSize || 24;
-          
-          return `drawtext=text='${escapedText}':x=${text.x}:y=${text.y}:fontsize=${fontSize}:fontcolor=${color}:borderw=2:bordercolor=black`;
-        }).join(',');
-
-        if (filterComplex.length > 0) {
-          filterComplex[filterComplex.length - 1] = filterComplex[filterComplex.length - 1].replace('[out]', '[tmp_text]');
-          filterComplex.push(`[tmp_text]${textFilters}[out]`);
-        } else {
-          filterComplex.push(`${previousOutput}${textFilters}[out]`);
-        }
-      }
-
-      // Ensure we have an output
-      if (filterComplex.length === 0) {
-        // No overlays, just copy the video
-        filterComplex.push('[0:v]copy[out]');
-      }
-
-      // Build final FFmpeg command
-      const filterComplexStr = filterComplex.join(';');
-      const command = [
-        ...inputFiles,
-        '-filter_complex', filterComplexStr,
-        '-map', '[out]',
-        '-map', '0:a?', // Copy audio if present
-        '-c:v', 'libx264', // Video codec
-        '-preset', 'fast', // Encoding preset
-        '-c:a', 'copy', // Copy audio without re-encoding
-        '-y', // Overwrite output file
-        outputPath
-      ];
-
-      console.log('🎬 FFmpeg command:', command.join(' '));
-
-      // Execute FFmpeg command
-      const session = await FFmpegKit.execute(command.join(' '));
-      const returnCode = await session.getReturnCode();
-
-      if (!ReturnCode.isSuccess(returnCode)) {
-        const output = await session.getOutput();
-        const failStackTrace = await session.getFailStackTrace();
-        console.error('❌ FFmpeg failed:', { output, failStackTrace });
-        throw new Error(`FFmpeg processing failed with code ${returnCode}`);
-      }
-
-      console.log('✅ Video composite complete:', outputPath);
-
-      // Clean up temp video
-      try {
-        await RNFS.unlink(tempVideoPath);
-      } catch (e) {
-        console.warn('Failed to clean up temp video:', e);
-      }
-
+      const downloadTime = Date.now() - downloadStart;
+      const totalTime = Date.now() - startTime;
+      
+      console.log(`✅ [${requestId}] Video downloaded in ${downloadTime}ms`);
+      console.log(`\n🎉 [${requestId}] VIDEO COMPOSITE SUCCESS`);
+      console.log(`   Total time: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
+      console.log(`   Output: ${outputPath}`);
+      console.log('='.repeat(60) + '\n');
+      
       return outputPath;
 
     } catch (error) {
-      console.error('❌ Video composite error:', error);
+      const errorTime = Date.now() - startTime;
+      console.error(`\n❌ [${requestId}] VIDEO COMPOSITE FAILED after ${errorTime}ms`);
+      console.error(`   Error: ${error.message}`);
+      console.error(`   Stack:`, error.stack);
+      console.log('='.repeat(60) + '\n');
+      
+      // If backend fails, show helpful error
+      if (error.message.includes('Backend') || error.message.includes('fetch')) {
+        throw new Error(
+          'Video processing backend is not available. ' +
+          'Please contact support or try again later.'
+        );
+      }
+      
       throw error;
     }
   }
 
   /**
+   * Get backend URL for video processing
+   */
+  getBackendUrl() {
+    const devUrl = AppConfig?.DEVELOPMENT?.DEV_SERVER_URL;
+    const prodUrl = AppConfig?.PRODUCTION_SERVER_URL;
+    
+    // Try dev first, then prod
+    if (devUrl && devUrl.trim()) {
+      return devUrl.replace(/\/$/, '');
+    }
+    
+    if (prodUrl && prodUrl.trim()) {
+      return prodUrl.replace(/\/$/, '');
+    }
+    
+    // Fallback
+    return 'http://10.0.2.2:10000'; // Android emulator
+  }
+
+  /**
    * Get video information using FFprobe
+   * STUB: Returns placeholder info since FFmpeg is not available
    * @param {string} videoPath - Path to video file
    * @returns {Promise<Object>} Video information
    */
   async getVideoInfo(videoPath) {
-    try {
-      const session = await FFmpegKit.execute(`-i ${videoPath}`);
-      const output = await session.getOutput();
-      
-      // Parse duration, resolution, etc. from FFmpeg output
-      const durationMatch = output.match(/Duration: (\d{2}):(\d{2}):(\d{2})/);
-      const resolutionMatch = output.match(/(\d{3,4})x(\d{3,4})/);
-      
-      return {
-        duration: durationMatch ? `${durationMatch[1]}:${durationMatch[2]}:${durationMatch[3]}` : 'unknown',
-        width: resolutionMatch ? parseInt(resolutionMatch[1]) : null,
-        height: resolutionMatch ? parseInt(resolutionMatch[2]) : null,
-        output
-      };
-    } catch (error) {
-      console.error('Error getting video info:', error);
-      return null;
-    }
+    console.warn('⚠️ getVideoInfo is a stub (FFmpeg not available)');
+    return {
+      duration: 'unknown',
+      width: null,
+      height: null,
+      output: 'FFmpeg not available'
+    };
   }
 }
 

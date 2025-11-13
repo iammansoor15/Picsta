@@ -170,13 +170,17 @@ const DraggableText = ({
           onPositionChange(textElement.id, finalX, finalY);
         }
         
+        // Only focus/edit if it was a tap (very small movement) and already focused
         const distance = Math.sqrt(gestureState.dx * gestureState.dx + gestureState.dy * gestureState.dy);
-        if (distance < 10) {
+        if (distance < 5 && isFocused) {
+          // Double tap to edit when already focused
+          if (!isEditing) {
+            setTimeout(() => setIsEditing(true), 100);
+          }
+        } else if (distance < 5) {
+          // First tap - just focus
           if (onFocus) {
             onFocus(textElement.id);
-          }
-          if (!isFocused) {
-            setTimeout(() => setIsEditing(true), 100);
           }
         }
       },
