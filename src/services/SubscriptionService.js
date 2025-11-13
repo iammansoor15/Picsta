@@ -18,8 +18,8 @@ const getToken = async () => {
  * Get base URL for API calls
  */
 const getBaseUrl = () => {
-  // Use the same config as BackgroundRemovalService
-  return 'http://192.168.1.46:10000'; // Your local network IP
+  // Use production server URL
+  return 'http://31.97.233.69:10000';
 };
 
 /**

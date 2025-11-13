@@ -19,12 +19,12 @@ const AppConfig = {
     ENABLE_LOGGING: true,
     SHOW_SERVER_CONFIG: true, // Enable manual server config for debugging
 
-    // Using local network server (wireless USB debugging)
-    DEV_SERVER_URL: 'http://192.168.1.46:10000', // Local network IP
+    // Using production server URL for development
+    DEV_SERVER_URL: 'http://31.97.233.69:10000', // Production server
     DEV_AUTH_SERVER_URL: null,
 
     // Allow production fallback
-    USE_PRODUCTION_FALLBACK: false, // Use local server for development
+    USE_PRODUCTION_FALLBACK: true, // Use production server
 
   }
 };
