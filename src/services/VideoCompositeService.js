@@ -90,6 +90,52 @@ class VideoCompositeService {
   }
 
   /**
+   * Upload a local photo to backend and get URL
+   */
+  async uploadPhotoToBackend(photoUri, requestId) {
+    try {
+      const backendUrl = this.getBackendUrl();
+      const uploadEndpoint = `${backendUrl}/api/videos/upload-photo`;
+      
+      // Clean file:// prefix
+      const filePath = photoUri.replace(/^file:\/\//, '');
+      
+      console.log(`   📷 Uploading photo: ${filePath.substring(0, 50)}...`);
+      
+      // Read file as base64
+      const base64Data = await RNFS.readFile(filePath, 'base64');
+      
+      // Determine file extension
+      const ext = filePath.split('.').pop().toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+      
+      // Upload to backend
+      const response = await fetch(uploadEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          photo: base64Data,
+          mimeType,
+          requestId
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`   ✅ Photo uploaded: ${result.url?.substring(0, 50)}...`);
+      return result.url;
+    } catch (error) {
+      console.error(`   ❌ Photo upload failed:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Composite video with overlays using backend processing
    */
   async compositeVideo(options) {
@@ -116,6 +162,33 @@ class VideoCompositeService {
     console.log(`   Dimensions: ${containerWidth}x${containerHeight}`);
 
     try {
+      // Upload local photos to backend first
+      const processedPhotos = [];
+      if (photos.length > 0) {
+        console.log(`\n📷 [${requestId}] Uploading ${photos.length} photo(s) to backend...`);
+        for (let i = 0; i < photos.length; i++) {
+          const photo = photos[i];
+          let photoUrl = photo.uri;
+          
+          // If it's a local file://, upload it first
+          if (photoUrl && photoUrl.startsWith('file://')) {
+            photoUrl = await this.uploadPhotoToBackend(photoUrl, requestId);
+          }
+          
+          processedPhotos.push({
+            ...photo,
+            uri: photoUrl
+          });
+        }
+      }
+      
+      // Upload banner if it's local
+      let processedBannerUri = bannerUri;
+      if (bannerUri && bannerUri.startsWith('file://')) {
+        console.log(`\n🏳️ [${requestId}] Uploading banner to backend...`);
+        processedBannerUri = await this.uploadPhotoToBackend(bannerUri, requestId);
+      }
+      
       // Send request to backend for video processing
       const backendUrl = this.getBackendUrl();
       const endpoint = `${backendUrl}/api/videos/composite`;
@@ -128,7 +201,7 @@ class VideoCompositeService {
       const payload = {
         videoUrl,
         overlays: {
-          photos: photos.map(p => ({
+          photos: processedPhotos.map(p => ({
             uri: p.uri,
             x: Math.round(p.x || 0),
             y: Math.round(p.y || 0),
@@ -142,7 +215,7 @@ class VideoCompositeService {
             fontSize: t.fontSize || 24,
             color: t.color || '#FFFFFF'
           })),
-          banner: bannerUri ? { uri: bannerUri } : null
+          banner: processedBannerUri ? { uri: processedBannerUri } : null
         },
         dimensions: {
           width: Math.round(containerWidth),
