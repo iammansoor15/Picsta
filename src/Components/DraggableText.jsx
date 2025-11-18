@@ -478,21 +478,38 @@ const DraggableText = ({
             onBlur={handleTextChange}
             multiline
             autoFocus
+            pointerEvents="auto"
           />
         ) : (
-          <Text
-            style={[
-              styles.textDisplay,
-              {
-                fontSize: Math.max(12, Math.min(36, containerDimensions.width * 0.15)), // Scale with container width
-                color: textElement.color || 'white',
-                fontWeight: textElement.fontWeight || 'normal',
-                textAlign: textElement.textAlign || 'center',
-              },
-            ]}
+          <TouchableOpacity
+            style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
+            activeOpacity={0.7}
+            onPress={() => {
+              if (isFocused) {
+                // Already focused - enter edit mode
+                setIsEditing(true);
+              } else {
+                // Not focused yet - focus first
+                if (onFocus) {
+                  onFocus(textElement.id);
+                }
+              }
+            }}
           >
-            {currentText || 'Tap to edit'}
-          </Text>
+            <Text
+              style={[
+                styles.textDisplay,
+                {
+                  fontSize: Math.max(12, Math.min(36, containerDimensions.width * 0.15)), // Scale with container width
+                  color: textElement.color || 'white',
+                  fontWeight: textElement.fontWeight || 'normal',
+                  textAlign: textElement.textAlign || 'center',
+                },
+              ]}
+            >
+              {currentText || 'Tap to edit'}
+            </Text>
+          </TouchableOpacity>
         )}
       </Animated.View>
 

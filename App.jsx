@@ -26,6 +26,7 @@ import SubscriptionGate from './src/screens/SubscriptionGate';
 import CustomHeader from './src/Components/CustomHeader';
 import NavigationService from './src/services/NavigationService';
 import ReduxInitializer from './src/Components/ReduxInitializer';
+import NotificationService from './src/services/NotificationService';
 import { store } from './src/store';
 import { COLORS } from './src/theme';
 
@@ -37,6 +38,31 @@ export default function App() {
   // Set up navigation service
   React.useEffect(() => {
     NavigationService.setTopLevelNavigator(navigationRef.current);
+  }, []);
+  
+  // Start notification service
+  React.useEffect(() => {
+    // Start notifications when app launches
+    NotificationService.start();
+    
+    // Handle notification taps
+    NotificationService.setOnTapCallback((data) => {
+      console.log('🎬 User tapped notification! Video:', data.videoUrl);
+      console.log('📹 Category:', data.subcategory);
+      console.log('🎯 You can now navigate to video screen or show modal');
+      
+      // TODO: Add your custom action here
+      // Examples:
+      // - Navigate to video preview screen
+      // - Open video in editor
+      // - Show video in modal
+      // - Add to favorites
+    });
+    
+    // Cleanup on unmount
+    return () => {
+      NotificationService.stop();
+    };
   }, []);
   
   // Handle navigation state changes for better UX

@@ -4163,6 +4163,11 @@ React.useEffect(() => {
         </View>
         )}
 
+        {!localMode && isSaving && (
+          <View style={styles.downloadSpinnerRow}>
+            <ActivityIndicator size="small" color={COLORS.primary || '#ffffff'} />
+          </View>
+        )}
 
         {/* TEMPORARY: Debug component for testing button toggle */}
         {/* <BackgroundToggleDebugger /> */}
@@ -4706,6 +4711,23 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
           {/* Second photo container removed - only one photo container by default now */}
           </View>
 
+          {/* Unfocus overlay - captures background taps when any container is focused */}
+          {/* IMPORTANT: Must be rendered BEFORE text elements to not block keyboard */}
+          {(focusedTextId || focusedPhotoId || isPhoto1Focused || isBannerFocused) && (
+            <TouchableOpacity
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: containerWidth,
+                height: containerHeight,
+                zIndex: 1,
+              }}
+              activeOpacity={1}
+              onPress={handleBackgroundPress}
+            />
+          )}
+
           {/* Draggable Text Elements - Positioned within image container for seamless overlay */}
           <View 
             style={[styles.textElementsContainer, { width: containerWidth, height: containerHeight }]}
@@ -4742,22 +4764,6 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
               );
             })}
           </View>
-          
-          {/* Unfocus overlay - captures background taps when any container is focused */}
-          {(focusedTextId || focusedPhotoId || isPhoto1Focused || isBannerFocused) && (
-            <TouchableOpacity
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: containerWidth,
-                height: containerHeight,
-                zIndex: 1,
-              }}
-              activeOpacity={1}
-              onPress={handleBackgroundPress}
-            />
-          )}
 
           {/* Dynamic Photo Elements - Positioned within image container */}
           <View style={[styles.photoElementsContainer, { width: containerWidth, height: containerHeight }]}>
@@ -4946,19 +4952,6 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
       </View>
     )}
 
-    {isProcessingVideo && (
-      <View style={styles.processingOverlay}>
-        <View style={styles.processingContent}>
-          <ActivityIndicator size="large" color="#007AFF" style={{ marginBottom: 15 }} />
-          <Text style={styles.processingTitle}>Processing Video</Text>
-          <Text style={styles.processingStatus}>{videoProcessingStatus}</Text>
-          <Text style={{color: '#aaa', fontSize: 12, marginTop: 10, textAlign: 'center'}}>
-            This may take a moment...{"\n"}Please wait
-          </Text>
-        </View>
-      </View>
-    )}
-
     {/* Custom Alert */}
     <CustomAlert
       visible={alertConfig.visible}
@@ -5002,6 +4995,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
+  },
+  downloadSpinnerRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingRight: 16,
+    paddingBottom: 4,
   },
   categoryTabsContainer: {
     paddingRight: 12,
