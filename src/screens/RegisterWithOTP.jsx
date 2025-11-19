@@ -16,8 +16,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthService from '../services/AuthService';
 import SubscriptionService from '../services/SubscriptionService';
 import { COLORS } from '../theme/colors';
+import { useDispatch } from 'react-redux';
+import { setDisplayName } from '../store/slices/profileSlice';
+import { updateProfileImage } from '../store/slices/profileSlice';
+import { updateAndPersistProfilePicture } from '../store/slices/profilePictureSlice';
 
 const RegisterWithOTP = ({ navigation }) => {
+  const dispatch = useDispatch();
   const [mode, setMode] = useState('register'); // 'register' or 'signin'
   const [step, setStep] = useState(1); // 1: Phone, 2: OTP, 3: Name (only for register)
   const [phone, setPhone] = useState('');
@@ -109,6 +114,23 @@ const RegisterWithOTP = ({ navigation }) => {
         if (result.token) {
           await AsyncStorage.setItem('authToken', result.token);
           await AsyncStorage.setItem('user', JSON.stringify(result.user));
+          
+          // IMPORTANT: Load user data into Redux immediately after sign-in
+          console.log('🔄 Sign-in: Loading user data into Redux:', result.user);
+          
+          // Update name in Redux
+          if (result.user?.name) {
+            dispatch(setDisplayName(result.user.name));
+            console.log('✅ Sign-in: Name loaded into Redux:', result.user.name);
+          }
+          
+          // Update profile photo in Redux if available
+          const photoUrl = result.user?.profilePhotoUrl || result.user?.profile_photo_url;
+          if (photoUrl) {
+            console.log('✅ Sign-in: Photo URL found:', photoUrl);
+            dispatch(updateProfileImage({ processedUri: photoUrl, originalUri: photoUrl }));
+            await dispatch(updateAndPersistProfilePicture({ imageUri: photoUrl, isProcessed: true }));
+          }
         }
 
         // Check subscription status
@@ -176,6 +198,10 @@ const RegisterWithOTP = ({ navigation }) => {
         if (profileUpdate?.user) {
           await AsyncStorage.setItem('user', JSON.stringify(profileUpdate.user));
           console.log('✅ Name successfully saved to database:', profileUpdate.user.name);
+          
+          // Update Redux with the new user data
+          dispatch(setDisplayName(profileUpdate.user.name));
+          console.log('✅ Registration: Name loaded into Redux:', profileUpdate.user.name);
         }
       }
 

@@ -160,42 +160,75 @@ const ProfileScreen = () => {
     }
   };
 
-  // Load user profile info from auth storage/server and prefill name/phone
+  // Load user profile info from auth storage/server and prefill name/photo
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        console.log('👤 ProfileScreen: Loading user data...');
         // Check for both old and new token keys
         const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
         let userJson = await AsyncStorage.getItem('user') || await AsyncStorage.getItem('AUTH_USER');
         let user = null;
+
         if (userJson) {
           try { user = JSON.parse(userJson); } catch {}
         }
-        if (!user && token) {
+
+        // If we don't have a user OR the cached user is missing a name, fall back to /me
+        const hasValidName = typeof user?.name === 'string' && user.name.trim().length > 0;
+        if ((!user || !hasValidName) && token) {
           try {
+            console.log('👤 ProfileScreen: Fetching user from server /me...');
             const me = await AuthService.me(token);
             user = me?.user || me;
             if (user) {
               await AsyncStorage.setItem('user', JSON.stringify(user));
+              try { await AsyncStorage.setItem('AUTH_USER', JSON.stringify(user)); } catch {}
+              console.log('✅ ProfileScreen: User data fetched from server:', user.name);
             }
           } catch (e) {
             console.warn('Failed to load user via /me:', e?.message || e);
           }
         }
+
         if (cancelled) return;
+
         if (user) {
+          // 1) Name: prefer server name, fallback to "User"
           const nextName = typeof user.name === 'string' && user.name.trim() ? user.name.trim() : 'User';
+          console.log('👤 ProfileScreen: Setting user name:', nextName);
           setUserName(nextName);
           setOriginalName(nextName);
           try { dispatch(setDisplayName(nextName)); } catch {}
+
+          // 2) Profile photo: if server provided one, use it (not just when default)
+          const rawPhotoUrl = user.profilePhotoUrl || user.profile_photo_url || null;
+          if (rawPhotoUrl) {
+            const photoUrl = String(rawPhotoUrl).trim();
+            console.log('👤 ProfileScreen: Found profile photo URL:', photoUrl);
+            if (photoUrl) {
+              try {
+                // Update both profile slice (for editor) and profilePicture slice (for header / other screens)
+                dispatch(updateProfileImage({ processedUri: photoUrl, originalUri: photoUrl }));
+                await dispatch(updateAndPersistProfilePicture({ imageUri: photoUrl, isProcessed: true }));
+                console.log('✅ ProfileScreen: Profile photo applied from database');
+              } catch (e) {
+                console.warn('Failed to apply profile photo from auth user:', e?.message || e);
+              }
+            }
+          } else {
+            console.log('ℹ️ ProfileScreen: No profile photo URL in user data');
+          }
+        } else {
+          console.log('⚠️ ProfileScreen: No user data found');
         }
       } catch (e) {
         console.warn('Auth profile prefill failed:', e?.message || e);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [dispatch]);
 
   // Load template preferences on mount
   useEffect(() => {

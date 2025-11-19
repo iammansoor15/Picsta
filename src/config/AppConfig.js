@@ -19,8 +19,11 @@ const AppConfig = {
     ENABLE_LOGGING: true,
     SHOW_SERVER_CONFIG: true, // Enable manual server config for debugging
 
-    // Using local server URL for development (wireless debugging)
-    DEV_SERVER_URL: "http://192.168.1.75:10000", // Local development server
+    // Using local server URL for development
+    // Use localhost:10000 when connected via USB (adb reverse tcp:10000 tcp:10000)
+    // Use 192.168.1.75:10000 for wireless debugging on same network
+    DEV_SERVER_URL: "http://localhost:10000", // USB debugging with adb reverse
+    // DEV_SERVER_URL: "http://192.168.1.75:10000", // Wireless debugging (uncomment if needed)
     DEV_AUTH_SERVER_URL: null,
 
     // Allow production fallback
