@@ -5,6 +5,7 @@ const initialState = {
   profileImage: getDefaultProfilePicture(),
   originalProfileImage: getDefaultProfilePicture(),
   isLoading: true,
+  displayName: 'Your Text',
 };
 
 const profileSlice = createSlice({
@@ -19,6 +20,10 @@ const profileSlice = createSlice({
       console.log('🔄 ProfileSlice: Updating profile images:', { processedUri, originalUri });
       state.profileImage = processedUri;
       state.originalProfileImage = originalUri;
+    },
+    setDisplayName: (state, action) => {
+      const name = typeof action.payload === 'string' ? action.payload.trim() : '';
+      state.displayName = name && name.length > 0 ? name : 'Your Text';
     },
     clearProfileImages: (state) => {
       state.profileImage = getDefaultProfilePicture();
@@ -53,6 +58,7 @@ export const loadExistingProfileImages = () => (dispatch) => {
 export const {
   setLoading,
   updateProfileImage,
+  setDisplayName,
   clearProfileImages,
   resetToDefault,
   loadExistingProfileImagesSuccess,
@@ -63,5 +69,6 @@ export const {
 export const selectProfileImage = (state) => state.profile.profileImage;
 export const selectOriginalProfileImage = (state) => state.profile.originalProfileImage;
 export const selectIsLoading = (state) => state.profile.isLoading;
+export const selectProfileDisplayName = (state) => state.profile.displayName;
 
 export default profileSlice.reducer;

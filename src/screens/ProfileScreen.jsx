@@ -25,11 +25,13 @@ import NavigationService from '../services/NavigationService';
 import AuthService from '../services/AuthService';
 import SubscriptionService from '../services/SubscriptionService';
 import ProfilePictureStorageService from '../services/ProfilePictureStorageService';
+import ProfilePhotoService from '../services/ProfilePhotoService';
 import BackgroundRemovalService from '../services/BackgroundRemovalService';
 import { 
   selectProfileImage, 
   selectOriginalProfileImage, 
-  updateProfileImage 
+  updateProfileImage,
+  setDisplayName,
 } from '../store/slices/profileSlice';
 import { 
   selectProfilePicture, 
@@ -186,6 +188,7 @@ const ProfileScreen = () => {
           const nextName = typeof user.name === 'string' && user.name.trim() ? user.name.trim() : 'User';
           setUserName(nextName);
           setOriginalName(nextName);
+          try { dispatch(setDisplayName(nextName)); } catch {}
         }
       } catch (e) {
         console.warn('Auth profile prefill failed:', e?.message || e);
@@ -299,7 +302,39 @@ const ProfileScreen = () => {
     // return unsubscribe;
   }, []); // Empty dependency array - only run on mount
 
-// Process profile image: optionally send to BG removal service if not already done
+  // Upload the final profile photo to the backend so it's stored in the database
+  const uploadProfilePhotoToServer = async (imageUri) => {
+    try {
+      if (!imageUri) return;
+
+      const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
+      if (!token) {
+        console.log('🔐 Skipping profile photo upload: no auth token');
+        return;
+      }
+
+      // Ensure file:// prefix for native upload
+      const uri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
+      console.log('📤 Uploading profile photo to server:', uri);
+
+      const res = await ProfilePhotoService.uploadProfilePhoto(uri, token);
+
+      // If server returns updated user, sync it to local storage
+      const serverUser = res?.data?.user || res?.user;
+      if (serverUser) {
+        const userJson = JSON.stringify(serverUser);
+        await AsyncStorage.setItem('user', userJson);
+        try { await AsyncStorage.setItem('AUTH_USER', userJson); } catch (e) {}
+      }
+
+      console.log('✅ Profile photo uploaded to server');
+    } catch (err) {
+      console.error('❌ Failed to upload profile photo to server:', err?.message || err);
+      // Failing to upload should not block local usage, so we swallow the error here
+    }
+  };
+
+  // Process profile image: optionally send to BG removal service if not already done
   const processProfileImage = async (imageUri, backgroundAlreadyRemoved = false) => {
     if (!imageUri) {
       console.log('❌ No image URI provided for processing');
@@ -369,6 +404,9 @@ const ProfileScreen = () => {
         isProcessed: bgRemovalSuccess 
       }));
 
+      // Also push the final profile photo to the backend so it's stored in the DB
+      uploadProfilePhotoToServer(displayImageUri);
+
       // Verify and notify
       testProfilePictureState();
       
@@ -406,6 +444,9 @@ const ProfileScreen = () => {
           imageUri: finalUri, 
           isProcessed: false 
         }));
+
+        // Attempt to upload the fallback image as well
+        uploadProfilePhotoToServer(finalUri);
         
         setAlertConfig({
           visible: true,
@@ -583,10 +624,87 @@ const ProfileScreen = () => {
     setHasChanges(nameChanged);
   };
 
-  const handleUpdate = () => {
-    Alert.alert('Profile Updated', 'Your profile has been updated successfully!');
-    setOriginalName(userName);
-    setHasChanges(false);
+  // Update profile name in the backend and locally
+  const handleUpdate = async ({ silent = false } = {}) => {
+    try {
+      console.log('=== PROFILE UPDATE STARTED ===');
+      console.log('Current userName:', userName);
+      console.log('Original name:', originalName);
+      
+      // Get the auth token
+      const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
+      console.log('Retrieved auth token:', token ? `${token.substring(0, 20)}...` : 'null');
+      
+      if (!token) {
+        console.log('No auth token found!');
+        if (!silent) {
+          setAlertConfig({
+            visible: true,
+            title: 'Error',
+            message: 'You must be signed in to update your profile',
+            buttons: [{ text: 'OK' }]
+          });
+        }
+        return { success: false, error: 'AUTH_REQUIRED' };
+      }
+
+      // Update Redux immediately so other screens see the change right away
+      const trimmedUserName = (userName || '').trim();
+      console.log('📢 About to update Redux with name:', trimmedUserName);
+      if (trimmedUserName) {
+        try {
+          dispatch(setDisplayName(trimmedUserName));
+          console.log('✅ Redux displayName updated to:', trimmedUserName);
+        } catch (e) {
+          console.error('❌ Failed to update Redux displayName:', e);
+        }
+      } else {
+        console.warn('⚠️ Skipping Redux update - empty name');
+      }
+
+      console.log('Calling AuthService.updateProfile with name:', userName);
+      // Call API to update profile in database
+      const result = await AuthService.updateProfile(token, { name: userName });
+      console.log('AuthService.updateProfile result:', result);
+      
+      // Update local storage with new user data
+      if (result?.user) {
+        console.log('Updating local storage with user:', result.user);
+        const userJson = JSON.stringify(result.user);
+        // Keep both legacy and new keys in sync so all screens see the same name
+        await AsyncStorage.setItem('user', userJson);
+        try { await AsyncStorage.setItem('AUTH_USER', userJson); } catch (e) {}
+      } else {
+        console.warn('No user data in result:', result);
+      }
+      
+      console.log('Profile update successful!');
+      if (!silent) {
+        setAlertConfig({
+          visible: true,
+          title: 'Profile Updated',
+          message: 'Your profile has been updated successfully!',
+          buttons: [{ text: 'OK' }]
+        });
+      }
+      setOriginalName(userName);
+      setHasChanges(false);
+      return { success: true, user: result?.user || null };
+    } catch (error) {
+      console.error('=== PROFILE UPDATE ERROR ===');
+      console.error('Error type:', error.constructor.name);
+      console.error('Error message:', error.message);
+      console.error('Full error:', error);
+      if (!silent) {
+        setAlertConfig({
+          visible: true,
+          title: 'Error',
+          message: error.message || 'Failed to update profile. Please try again.',
+          buttons: [{ text: 'OK' }]
+        });
+      }
+      return { success: false, error };
+    }
   };
 
   const removeProfilePicture = async () => {
@@ -1057,7 +1175,12 @@ const ProfileScreen = () => {
             style={[styles.updateButton, { marginTop: 8 }]}
             onPress={async () => {
               try {
-                // Persist to AsyncStorage (plural + primary)
+                // Detect if the display name changed so we can save it together with preferences
+                const trimmedName = (userName || '').trim();
+                const trimmedOriginal = (originalName || '').trim();
+                const nameChanged = trimmedName && trimmedName !== trimmedOriginal;
+
+                // Persist template preferences to AsyncStorage (plural + primary)
                 await TemplatePreferences.setReligions(selectedReligions);
 
                 // Compute a primary religion to drive global selection and refresh logic
@@ -1074,10 +1197,15 @@ const ProfileScreen = () => {
                 dispatch(setGlobalReligion(primary));
                 try { dispatch(saveMainSubToStorage()); } catch {}
 
+                // If the user changed their name, update it on the server as part of saving preferences
+                if (nameChanged) {
+                  await handleUpdate({ silent: true });
+                }
+
                 setAlertConfig({
                   visible: true,
                   title: 'Saved',
-                  message: 'Preferences updated',
+                  message: nameChanged ? 'Name & preferences updated' : 'Preferences updated',
                   buttons: [{ text: 'OK' }]
                 });
               } catch (e) {

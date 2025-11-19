@@ -75,6 +75,14 @@ const DraggableText = ({
   const [currentText, setCurrentText] = useState(textElement.text);
   const [isResizing, setIsResizing] = useState(false);
 
+  // Keep displayed text in sync when parent updates textElement.text (e.g., Redux name change)
+  // but do NOT override while the user is actively editing.
+  useEffect(() => {
+    if (!isEditing && textElement.text !== currentText) {
+      setCurrentText(textElement.text || '');
+    }
+  }, [textElement.text, isEditing]);
+
   const [containerDimensions, setContainerDimensions] = useState({ 
     width: textElement.width || 120, 
     height: textElement.height || 50 

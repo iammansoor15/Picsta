@@ -132,5 +132,31 @@ export default {
     const data = await handle(resp);
     console.log('AuthService.resendOtp: OTP resent successfully');
     return data;
+  },
+  
+  async updateProfile(token, { name, profilePhotoUrl }) {
+    const body = JSON.stringify({ name, profilePhotoUrl });
+    const authBase = base();
+    console.log('=== AuthService.updateProfile CALLED ===');
+    console.log('AuthService.updateProfile: name =', name);
+    console.log('AuthService.updateProfile: profilePhotoUrl =', profilePhotoUrl);
+    console.log('AuthService.updateProfile: request body =', body);
+    console.log('AuthService.updateProfile: base URL =', authBase);
+    console.log('AuthService.updateProfile: full URL =', `${authBase}/api/auth/profile`);
+    console.log('AuthService.updateProfile: token =', token ? `${token.substring(0, 20)}...` : 'null');
+    
+    const resp = await fetchWithTimeout(`${authBase}/api/auth/profile`, { 
+      method: 'PUT', 
+      headers: { ...jsonHeaders, Authorization: `Bearer ${token}` }, 
+      body 
+    }, 15000);
+    
+    console.log('AuthService.updateProfile: response status =', resp.status);
+    console.log('AuthService.updateProfile: response ok =', resp.ok);
+    
+    const data = await handle(resp);
+    console.log('AuthService.updateProfile: response data =', data);
+    console.log('AuthService.updateProfile: SUCCESS');
+    return data;
   }
 };

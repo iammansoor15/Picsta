@@ -153,18 +153,30 @@ const RegisterWithOTP = ({ navigation }) => {
     setError('');
 
     try {
+      console.log('🔵 Starting registration with name:', name.trim());
+      
+      // First verify OTP (this creates/verifies the user with temporary name)
       const result = await AuthService.verifyOtp({
         phone,
         otp,
-        name: name.trim(),
+        name: 'User', // Use dummy name, we'll update it next
       });
 
-      console.log('Registration successful:', result);
+      console.log('🔵 OTP verified, token received');
 
-      // Store token
+      // Now update the profile with the actual name using the /profile endpoint
       if (result.token) {
         await AsyncStorage.setItem('authToken', result.token);
-        await AsyncStorage.setItem('user', JSON.stringify(result.user));
+        
+        console.log('🔵 Updating profile with name:', name.trim());
+        const profileUpdate = await AuthService.updateProfile(result.token, { name: name.trim() });
+        console.log('🔵 Profile updated:', JSON.stringify(profileUpdate, null, 2));
+        
+        // Store the updated user data
+        if (profileUpdate?.user) {
+          await AsyncStorage.setItem('user', JSON.stringify(profileUpdate.user));
+          console.log('✅ Name successfully saved to database:', profileUpdate.user.name);
+        }
       }
 
       // Check subscription status
@@ -184,9 +196,9 @@ const RegisterWithOTP = ({ navigation }) => {
         },
       ]);
     } catch (err) {
-      console.error('Verify OTP error:', err);
-      setError(err.message || 'Invalid OTP. Please try again.');
-      Alert.alert('Error', err.message || 'Invalid OTP. Please try again.');
+      console.error('Registration error:', err);
+      setError(err.message || 'Registration failed. Please try again.');
+      Alert.alert('Error', err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -50,6 +50,7 @@ import ImagePickerService from '../services/ImagePickerService';
 import BackgroundToggleService from '../services/BackgroundToggleService';
 // import BackgroundToggleDebugger from '../Components/BackgroundToggleDebugger';
 import TemplatePreferences from '../services/TemplatePreferences';
+import AuthService from '../services/AuthService';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomHeader from '../Components/CustomHeader';
 import Feather from 'react-native-vector-icons/Feather';
@@ -57,7 +58,7 @@ import AntDesign from 'react-native-vector-icons/AntDesign';
 import { Svg, Path, Rect, Circle, Line } from 'react-native-svg';
 import { uploadTemplate } from '../store/slices/cloudinaryTemplateSlice';
 import { computeDefaultPositions } from '../utils/DefaultPositions';
-import { selectProfileImage, selectOriginalProfileImage } from '../store/slices/profileSlice';
+import { selectProfileImage, selectOriginalProfileImage, selectProfileDisplayName } from '../store/slices/profileSlice';
 import ProfileImageStatusService from '../services/ProfileImageStatusService';
 import { selectCategories, loadCategories } from '../store/slices/categorySlice';
 import { loadTemplatesByCategory } from '../store/slices/cloudinaryTemplateSlice';
@@ -1209,7 +1210,10 @@ const HeroScreen = ({ route, navigation }) => {
   const { photo1Uri, photo2Uri } = photoState;
   
   const [shape, setShape] = useState('square');
+  const [userName, setUserName] = useState('Your Text');
   const [textElements, setTextElements] = useState([]);
+  const lastUserNameRef = useRef('Your Text');
+  const profileDisplayName = useSelector(selectProfileDisplayName);
   const [focusedTextId, setFocusedTextId] = useState(null);
   const [showTextCustomization, setShowTextCustomization] = useState(false);
   const [selectedTextId, setSelectedTextId] = useState(null);
@@ -1285,6 +1289,49 @@ const HeroScreen = ({ route, navigation }) => {
       keyboardDidHideListener.remove();
     };
   }, []);
+
+  // Resolve the user name purely from Redux so it reacts instantly to ProfileScreen updates
+  const resolveAndApplyUserName = React.useCallback(() => {
+    try {
+      const trimmed = (profileDisplayName || '').trim();
+      const finalName = trimmed.length > 0 ? trimmed : 'Your Text';
+      console.log('🔍 HeroScreen resolveAndApplyUserName -> using name from Redux:', finalName);
+
+      setUserName(finalName);
+      lastUserNameRef.current = finalName;
+
+      // Keep the default text element (user name container) in sync as well
+      setTextElements(prev => {
+        if (!Array.isArray(prev) || prev.length === 0) return prev;
+        return prev.map((el, idx) => {
+          // Prefer matching the explicit default-text-* id, fall back to first element
+          const isDefault = (el.id && el.id.startsWith('default-text-')) || (!el.id && idx === 0);
+          return isDefault ? { ...el, text: finalName } : el;
+        });
+      });
+    } catch (e) {
+      console.warn('❌ Failed to resolve user name from Redux:', e);
+    }
+  }, [profileDisplayName, setTextElements]);
+
+  // Load user name initially
+  React.useEffect(() => {
+    resolveAndApplyUserName();
+  }, [resolveAndApplyUserName]);
+
+  // Refresh user name whenever HeroScreen gains focus (e.g., after returning from Profile)
+  useFocusEffect(
+    React.useCallback(() => {
+      resolveAndApplyUserName();
+      return () => {};
+    }, [resolveAndApplyUserName])
+  );
+
+  // Whenever Redux displayName changes, immediately update userName and the default text element
+  React.useEffect(() => {
+    console.log('🔔 HeroScreen profileDisplayName changed:', profileDisplayName);
+    resolveAndApplyUserName();
+  }, [profileDisplayName, resolveAndApplyUserName]);
   
   // Force container to always use 9:16 aspect ratio
   React.useEffect(() => {
@@ -1641,9 +1688,11 @@ const HeroScreen = ({ route, navigation }) => {
                 
                 if (!Array.isArray(prev) || prev.length === 0) {
                   // No text exists - create default at backend position
+                  // Use Redux name if available, else userName state, else default
+                  const displayName = (profileDisplayName && profileDisplayName.trim()) || userName || 'Your Text';
                   const newEl = {
                     id: `default-text-${Date.now()}`,
-                    text: 'Your Text',
+                    text: displayName,
                     x: tX,
                     y: tY,
                     width: tWidth,
@@ -1655,7 +1704,7 @@ const HeroScreen = ({ route, navigation }) => {
                   };
                   try { if (defaultTextAddedRef && defaultTextAddedRef.current !== undefined) defaultTextAddedRef.current = true; } catch {}
                   lastAppliedTextAxisSerial.current = currentSerial;
-                  console.log('📍 Created text at template axis:', { x: tX, y: tY, serial: currentSerial });
+                  console.log('📍 Created text at template axis:', { x: tX, y: tY, serial: currentSerial, text: displayName });
                   return [newEl];
                 } else {
                   // Text exists - update FIRST text element to new template's axis
@@ -1680,7 +1729,7 @@ const HeroScreen = ({ route, navigation }) => {
       console.error('❌ Error in applyDocToTemplate:', e);
     }
     return false;
-  }, [getTemplateUri, setTemplateImage, setReelsTemplates, containerWidth, containerHeight, photo1Size, pan1X, pan1Y, textElements, setTextElements]);
+  }, [getTemplateUri, setTemplateImage, setReelsTemplates, containerWidth, containerHeight, photo1Size, pan1X, pan1Y, textElements, setTextElements, userName, profileDisplayName]);
 
   // const CATEGORY_KEY = 'congratulations'; // replaced by selectedCategory state
 
@@ -2663,29 +2712,22 @@ React.useEffect(() => {
   };
 
   // Add a default first text container like the first photo container
-  const addDefaultTextElement = async () => {
+  // The text here MUST come from the ProfileScreen Redux displayName so it updates live
+  const addDefaultTextElement = () => {
     if (defaultTextAddedRef.current) return;
-    
-    // Fetch user's name from AsyncStorage
-    let userName = 'Your Text'; // Default fallback
-    try {
-      const userJson = await AsyncStorage.getItem('AUTH_USER');
-      if (userJson) {
-        const user = JSON.parse(userJson);
-        userName = user?.name || 'Your Text';
-      }
-    } catch (e) {
-      console.warn('Failed to load user name for default text:', e);
-    }
-    
+
     const padding = 20;
     const estimatedTextWidth = 160;
     const estimatedTextHeight = 42;
     const safeX = padding;
     const safeY = Math.max(padding, containerHeight - estimatedTextHeight - padding);
+
+    // Prefer the Redux name, then local state, then fallback
+    const resolvedName = (profileDisplayName && profileDisplayName.trim()) || userName || 'Your Text';
+
     const newTextElement = {
       id: `default-text-${Date.now()}`,
-      text: userName,
+      text: resolvedName,
       x: safeX,
       y: safeY,
       width: estimatedTextWidth,
@@ -2710,33 +2752,8 @@ React.useEffect(() => {
     // Only run when textElements emptiness changes or dimensions ready
   }, [textElements.length, containerWidth, containerHeight]);
 
-  // Update the default text element when returning from ProfileScreen
-  useFocusEffect(
-    React.useCallback(() => {
-      let active = true;
-      (async () => {
-        try {
-          // Fetch user's name from AsyncStorage
-          const userJson = await AsyncStorage.getItem('AUTH_USER');
-          if (userJson && active) {
-            const user = JSON.parse(userJson);
-            const userName = user?.name || 'Your Text';
-            
-            // Update the default text element if it exists
-            if (textElements.length > 0) {
-              const defaultTextElement = textElements.find(el => el.id.startsWith('default-text-'));
-              if (defaultTextElement && defaultTextElement.text !== userName) {
-                updateTextContent(defaultTextElement.id, userName);
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to update user name in text:', e);
-        }
-      })();
-      return () => { active = false; };
-    }, [textElements])
-  );
+  // The default text element is now fully controlled by Redux (ProfileScreen),
+  // so we no longer fetch the name from the backend or AsyncStorage here.
 
   const updateTextContent = (textId, newText) => {
     setTextElements(prev => 
