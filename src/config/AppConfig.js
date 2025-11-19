@@ -1,7 +1,7 @@
 const AppConfig = {
-  PRODUCTION_SERVER_URL: "http://192.168.1.75:10000",
+  PRODUCTION_SERVER_URL: 'http://31.97.233.69:10000',
   // Optional separate auth API URL (production)
-  PRODUCTION_AUTH_SERVER_URL: null,
+  PRODUCTION_AUTH_SERVER_URL:  'http://31.97.233.69:10000',
   
   // App settings
   APP_NAME: 'Picstar',
@@ -21,10 +21,10 @@ const AppConfig = {
 
     // Using local server URL for development
     // Use localhost:10000 when connected via USB (adb reverse tcp:10000 tcp:10000)
-    // Use 192.168.1.75:10000 for wireless debugging on same network
-    DEV_SERVER_URL: "http://localhost:10000", // USB debugging with adb reverse
-    // DEV_SERVER_URL: "http://192.168.1.75:10000", // Wireless debugging (uncomment if needed)
-    DEV_AUTH_SERVER_URL: null,
+    // Use 192.168.1.126:10000 for wireless debugging on same network
+    DEV_SERVER_URL: 'http://31.97.233.69:10000', // Production server
+    // DEV_SERVER_URL: "http://localhost:10000", // USB debugging with adb reverse (uncomment if needed)
+    DEV_AUTH_SERVER_URL: 'http://31.97.233.69:10000',
 
     // Allow production fallback
     USE_PRODUCTION_FALLBACK: true, // Use production server
