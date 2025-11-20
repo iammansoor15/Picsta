@@ -48,6 +48,7 @@ import backgroundRemovalService from '../services/BackgroundRemovalService';
 import ImageMetadataService from '../services/ImageMetadataService';
 import ImagePickerService from '../services/ImagePickerService';
 import BackgroundToggleService from '../services/BackgroundToggleService';
+import VideoPrefetchManager from '../services/VideoPrefetchManager';
 // import BackgroundToggleDebugger from '../Components/BackgroundToggleDebugger';
 import TemplatePreferences from '../services/TemplatePreferences';
 import AuthService from '../services/AuthService';
@@ -488,125 +489,82 @@ const DynamicPhotoElement = ({
 
 // Separate component for video template items to use hooks properly
 const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCurrentVideo, onCached, hideVideoForCapture = false, captureBgColor = 'transparent' }) => {
-  const [localUri, setLocalUri] = React.useState(null);
-  const [downloadProgress, setDownloadProgress] = React.useState(0);
-  const [isDownloading, setIsDownloading] = React.useState(false);
+  const [videoSource, setVideoSource] = React.useState(null);
   const [isReady, setIsReady] = React.useState(false);
   const [isBuffering, setIsBuffering] = React.useState(true);
   const [canPlay, setCanPlay] = React.useState(false);
   const videoRef = React.useRef(null);
-  
+  const hasInitialized = React.useRef(false);
+
   const videoUrl = item?.video_url;
   const imageUrl = item?.image_url || item?.url || item?.secure_url;
-  const isVideo = item?.resource_type === 'video' || 
-                  (videoUrl && (videoUrl.endsWith('.mp4') || videoUrl.endsWith('.mov') || 
+  const serialNo = item?.serial_no;
+  const isVideo = item?.resource_type === 'video' ||
+                  (videoUrl && (videoUrl.endsWith('.mp4') || videoUrl.endsWith('.mov') ||
                    videoUrl.endsWith('.avi') || videoUrl.includes('/video/upload/')));
-  
-  // Download video to local storage on mount (for videos only)
+
+  // Initialize video source from cache or stream
   React.useEffect(() => {
-    if (!isVideo || !videoUrl) return;
-    
-    const downloadVideo = async () => {
+    if (!isVideo || !videoUrl || hasInitialized.current) return;
+
+    const initializeVideo = async () => {
       try {
-        setIsDownloading(true);
-        const RNFS = require('react-native-fs');
-        
-        // Create cache filename based on video URL
-        const filename = `video_cache_${item?.serial_no || index}_${Date.now()}.mp4`;
-        const downloadPath = `${RNFS.CachesDirectoryPath}/${filename}`;
-        
-        // Check if already downloaded
-        const exists = await RNFS.exists(downloadPath);
-        if (exists) {
-          console.log('✅ Video already cached at index:', index);
-          const localFileUri = Platform.OS === 'android' ? `file://${downloadPath}` : downloadPath;
-          console.log('📁 Using cached file URI:', localFileUri);
-          setLocalUri(localFileUri);
-          try { onCached && onCached(localFileUri); } catch (_) {}
-          setIsReady(true);
-          setIsDownloading(false);
-          return;
-        }
-        
-        console.log('📥 Downloading video at index:', index, 'from:', videoUrl.substring(0, 60));
-        
-        // Download with progress tracking
-        const download = RNFS.downloadFile({
-          fromUrl: videoUrl,
-          toFile: downloadPath,
-          progressDivider: 10,
-          begin: (res) => {
-            console.log('🔄 Download started, size:', res.contentLength);
-          },
-          progress: (res) => {
-            const progress = res.bytesWritten / res.contentLength;
-            setDownloadProgress(progress);
-            if (progress % 0.2 < 0.1) { // Log every 20%
-              console.log('📊 Download progress at index:', index, `${(progress * 100).toFixed(0)}%`);
-            }
-          },
-        });
-        
-        const result = await download.promise;
-        
-        if (result.statusCode === 200) {
-          console.log('✅ Video downloaded successfully at index:', index);
-          // Use file:// protocol for local files
-          const localFileUri = Platform.OS === 'android' ? `file://${downloadPath}` : downloadPath;
-          console.log('📁 Local file URI:', localFileUri);
-          setLocalUri(localFileUri);
-          try { onCached && onCached(localFileUri); } catch (_) {}
-          setIsReady(true);
+        hasInitialized.current = true;
+
+        // Check if already cached via VideoPrefetchManager
+        const cachedUri = await VideoPrefetchManager.getCachedUri(videoUrl, serialNo, index);
+
+        if (cachedUri) {
+          console.log(`✅ Using cached video at index ${index}`);
+          setVideoSource(cachedUri);
+          try { onCached && onCached(cachedUri); } catch (_) {}
         } else {
-          console.error('❌ Download failed with status:', result.statusCode);
-          // Fallback to streaming
-          setLocalUri(videoUrl);
-          setIsReady(true);
+          console.log(`🌐 Streaming video at index ${index}`);
+          setVideoSource(videoUrl);
         }
-        
-        setIsDownloading(false);
-      } catch (error) {
-        console.error('❌ Video download error at index:', index, error);
-        // Fallback to streaming
-        setLocalUri(videoUrl);
+
         setIsReady(true);
-        setIsDownloading(false);
+      } catch (error) {
+        console.error(`❌ Video initialization error at index ${index}:`, error);
+        // Fallback to streaming
+        setVideoSource(videoUrl);
+        setIsReady(true);
       }
     };
-    
-    downloadVideo();
-  }, [isVideo, videoUrl, index]);
-  
+
+    initializeVideo();
+  }, [isVideo, videoUrl, index, serialNo]);
+
   // When video becomes current and is ready, seek to start
   React.useEffect(() => {
     if (isCurrentVideo && isReady && videoRef.current) {
       videoRef.current.seek(0);
-      console.log('🔄 Restarting video at index:', index);
+      console.log(`🔄 Restarting video at index ${index}`);
     }
-  }, [isCurrentVideo, isReady]);
-  
+  }, [isCurrentVideo, isReady, index]);
+
   // For images, mark as ready immediately; for videos, allow initial play
   React.useEffect(() => {
     if (!isVideo) {
       setIsReady(true);
-    } else if (localUri) {
-      // Allow video to start playing once URI is available
+    } else if (videoSource) {
+      // Allow video to start playing once source is available
       setCanPlay(true);
       setIsBuffering(false);
     }
-  }, [isVideo, localUri]);
+  }, [isVideo, videoSource]);
   
-  // Show loading spinner while downloading only
-  const showLoading = isVideo && isDownloading;
-  
+  // Only show buffering on initial load, not during scroll transitions
+  const showBuffering = false; // Disabled for smooth scroll experience
+
   return (
     <View style={{ width: containerWidth, height: containerHeight, backgroundColor: captureBgColor || 'transparent' }}>
       {isVideo ? (
         <>
-          {localUri && !hideVideoForCapture ? (
+          {videoSource && !hideVideoForCapture ? (
             <Video
               ref={videoRef}
-              source={{ uri: localUri }}
+              source={{ uri: videoSource }}
               style={{ width: '100%', height: '100%' }}
               resizeMode="cover"
               repeat={true}
@@ -618,60 +576,41 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
               posterResizeMode="cover"
               poster={imageUrl}
               bufferConfig={{
-                minBufferMs: 15000,
-                maxBufferMs: 50000,
-                bufferForPlaybackMs: 2500,
-                bufferForPlaybackAfterRebufferMs: 5000
+                minBufferMs: 3000,  // Optimized for instant playback
+                maxBufferMs: 20000,  // Reduced for faster startup
+                bufferForPlaybackMs: 500,  // Minimal buffer for instant start
+                bufferForPlaybackAfterRebufferMs: 2000
               }}
               maxBitRate={2000000}
               progressUpdateInterval={250}
               onLoad={(data) => {
-                console.log('✅ Video loaded from local cache at index:', index, 'duration:', data.duration);
+                console.log(`✅ Video loaded at index ${index}, duration: ${data.duration}s`);
                 setIsReady(true);
+                setCanPlay(true);
+                setIsBuffering(false);
               }}
-              onBuffer={({ isBuffering }) => {
-                setIsBuffering(isBuffering);
-                if (isBuffering) {
-                  console.log('📊 Video buffering at index:', index);
-                  setCanPlay(false);
+              onBuffer={({ isBuffering: buffering }) => {
+                // Only log buffering, don't show UI
+                if (buffering) {
+                  console.log(`📊 Video buffering at index ${index}`);
                 } else {
-                  console.log('✅ Video buffered and ready at index:', index);
+                  console.log(`✅ Video ready at index ${index}`);
                   setCanPlay(true);
                 }
               }}
               onReadyForDisplay={() => {
-                console.log('✅ Video ready for display at index:', index);
+                console.log(`✅ Video ready for display at index ${index}`);
                 setIsReady(true);
                 setCanPlay(true);
+                setIsBuffering(false);
               }}
               onError={(error) => {
-                console.error('❌ Video playback error at index:', index, error);
+                console.error(`❌ Video playback error at index ${index}:`, error);
               }}
             />
           ) : null}
-          
-          {/* Loading spinner overlay - shows while downloading */}
-          {showLoading && (
-            <View style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <ActivityIndicator size="large" color="#ffffff" />
-              <Text style={{ color: '#fff', marginTop: 10, fontSize: 14 }}>
-                {isDownloading 
-                  ? `Downloading ${(downloadProgress * 100).toFixed(0)}%` 
-                  : isBuffering 
-                  ? 'Buffering video...' 
-                  : 'Loading...'}
-              </Text>
-            </View>
-          )}
+
+          {/* No buffering indicator for smooth scroll experience */}
         </>
       ) : (
         <Image
@@ -679,10 +618,10 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
           style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
           onLoad={() => {
-            console.log('✅ Image loaded successfully for scroll index:', index, 'serial:', item?.serial_no);
+            console.log(`✅ Image loaded at index ${index}, serial: ${item?.serial_no}`);
           }}
           onError={(e) => {
-            console.error('❌ Image load error at index:', index, 'serial:', item?.serial_no, e?.nativeEvent?.error);
+            console.error(`❌ Image load error at index ${index}:`, e?.nativeEvent?.error);
           }}
         />
       )}
@@ -1283,12 +1222,75 @@ const HeroScreen = ({ route, navigation }) => {
       'keyboardDidHide',
       () => setIsKeyboardVisible(false)
     );
-    
+
     return () => {
       keyboardDidShowListener.remove();
       keyboardDidHideListener.remove();
     };
   }, []);
+
+  // Video prefetching hook - prefetch videos around current index for smooth scrolling
+  React.useEffect(() => {
+    if (!reelsTemplates || reelsTemplates.length === 0) return;
+
+    const prefetchVideos = async () => {
+      const PREFETCH_RANGE = 4; // Prefetch 4 videos ahead and 4 behind (±4)
+      const startIndex = Math.max(0, currentReelIndex - PREFETCH_RANGE);
+      const endIndex = Math.min(reelsTemplates.length - 1, currentReelIndex + PREFETCH_RANGE);
+
+      console.log(`🎬 Prefetching videos: range [${startIndex}-${endIndex}], current: ${currentReelIndex}`);
+
+      // Prefetch videos in order of priority (current -> adjacent -> further)
+      const prefetchOrder = [];
+
+      // Add current video first
+      prefetchOrder.push(currentReelIndex);
+
+      // Add videos in expanding circles around current
+      for (let distance = 1; distance <= PREFETCH_RANGE; distance++) {
+        if (currentReelIndex + distance <= endIndex) {
+          prefetchOrder.push(currentReelIndex + distance);
+        }
+        if (currentReelIndex - distance >= startIndex) {
+          prefetchOrder.push(currentReelIndex - distance);
+        }
+      }
+
+      // Prefetch each video
+      for (const index of prefetchOrder) {
+        const item = reelsTemplates[index];
+        if (!item) continue;
+
+        const videoUrl = item?.video_url;
+        const isVideo = item?.resource_type === 'video' ||
+                        (videoUrl && (videoUrl.endsWith('.mp4') || videoUrl.endsWith('.mov') ||
+                         videoUrl.endsWith('.avi') || videoUrl.includes('/video/upload/')));
+
+        if (isVideo && videoUrl) {
+          // Check if already cached or downloading
+          const isCached = await VideoPrefetchManager.isCached(videoUrl, item?.serial_no, index);
+          const isDownloading = VideoPrefetchManager.isDownloading(videoUrl);
+
+          if (!isCached && !isDownloading) {
+            // Calculate priority: higher for videos closer to current
+            const distance = Math.abs(index - currentReelIndex);
+            const priority = PREFETCH_RANGE - distance;
+
+            console.log(`📥 Initiating prefetch: index ${index}, serial ${item?.serial_no}, priority ${priority}`);
+
+            // Fire and forget - don't await
+            VideoPrefetchManager.prefetchVideo(videoUrl, item?.serial_no, index, priority)
+              .catch(error => {
+                console.error(`❌ Prefetch failed for index ${index}:`, error.message);
+              });
+          }
+        }
+      }
+    };
+
+    // Trigger prefetch
+    prefetchVideos();
+  }, [currentReelIndex, reelsTemplates]);
 
   // Resolve the user name purely from Redux so it reacts instantly to ProfileScreen updates
   const resolveAndApplyUserName = React.useCallback(() => {
@@ -4415,6 +4417,10 @@ onHandlerStateChange={({ nativeEvent }) => {
                             index,
                           })}
                           initialScrollIndex={currentReelIndex}
+                          initialNumToRender={5}
+                          maxToRenderPerBatch={3}
+                          windowSize={11}
+                          removeClippedSubviews={false}
                           onScrollToIndexFailed={(info) => {
                             console.warn('🚨 Scroll to index failed:', info);
                             const wait = new Promise(resolve => setTimeout(resolve, 500));
