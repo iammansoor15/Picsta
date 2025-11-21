@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Image, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubscriptionService from '../services/SubscriptionService';
-import Logo from '../../assets/PicStar_logo.png';
+import Logo from '../../assets/Winter_splash.png';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
 
 const SplashScreen = () => {
@@ -57,12 +57,14 @@ const SplashScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Animated.Image 
-        source={Logo} 
-        style={[styles.logo, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]} 
+      <Animated.Image
+        source={Logo}
+        style={[styles.logo, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
+        resizeMode="contain"
       />
-      <Animated.Text style={[styles.title, { opacity: fadeAnim }]}>Picstar</Animated.Text>
-      <Animated.Text style={[styles.subtitle, { opacity: fadeAnim }]}>Create beautiful memories</Animated.Text>
+      <Animated.Text style={[styles.text, { opacity: fadeAnim }]}>
+        Winter
+      </Animated.Text>
     </View>
   );
 };
@@ -72,24 +74,19 @@ export default SplashScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   logo: {
-    width: 180,
-    height: 180,
-    marginBottom: SPACING.lg,
-    resizeMode: 'contain',
+    width: '80%',
+    height: '50%',
+    marginBottom: 15,
   },
-  title: {
-    ...TYPOGRAPHY.h1,
-    color: COLORS.white,
-    marginBottom: SPACING.xs,
-  },
-  subtitle: {
-    ...TYPOGRAPHY.bodyLarge,
-    color: COLORS.primaryLight,
-    marginBottom: SPACING.xl,
+  text: {
+    fontSize: 60,
+    fontFamily: 'Selima-Regular',
+    color: '#9C27B0',
+    marginTop: 20,
   },
 });
