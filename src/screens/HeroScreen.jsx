@@ -4144,41 +4144,53 @@ React.useEffect(() => {
             ))}
           </View>
 
-          {/* Profile photo */}
-          <TouchableOpacity
-            onPress={async () => {
-              try {
-                // Check for auth token (OTP registration uses 'authToken')
-                const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
-                if (!token) {
-                  // No token, navigate to registration
+          {/* Right side: Template button + Profile photo */}
+          <View style={styles.topBarRightRow}>
+            {/* Simple plus icon for templates */}
+            <TouchableOpacity
+              style={styles.headerTemplateButton}
+              onPress={handleTemplateButtonPress}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.headerTemplatePlus}>➕</Text>
+            </TouchableOpacity>
+
+            {/* Profile photo */}
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  // Check for auth token (OTP registration uses 'authToken')
+                  const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
+                  if (!token) {
+                    // No token, navigate to registration
+                    navigation.navigate('RegisterWithOTP');
+                    return;
+                  }
+                } catch (e) {
+                  // Error getting token, navigate to registration
                   navigation.navigate('RegisterWithOTP');
                   return;
                 }
-              } catch (e) {
-                // Error getting token, navigate to registration
-                navigation.navigate('RegisterWithOTP');
-                return;
-              }
-              // User is authenticated, go to profile
-              navigation.navigate('ProfileScreen');
-            }}
-            style={styles.profilePhotoContainerUnderHeader}
-            activeOpacity={0.8}
-          >
-            <Image
-              source={(() => {
-                try {
-                  if (profilePictureUri && !isDefaultPicture) {
-                    return { uri: profilePictureUri };
-                  }
-                } catch {}
-                return getDefaultProfileImage();
-              })()}
-              style={styles.profilePhotoUnderHeader}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
+                // User is authenticated, go to profile
+                navigation.navigate('ProfileScreen');
+              }}
+              style={styles.profilePhotoContainerUnderHeader}
+              activeOpacity={0.8}
+            >
+              <Image
+                source={(() => {
+                  try {
+                    if (profilePictureUri && !isDefaultPicture) {
+                      return { uri: profilePictureUri };
+                    }
+                  } catch {}
+                  return getDefaultProfileImage();
+                })()}
+                style={styles.profilePhotoUnderHeader}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          </View>
         </View>
         )}
 
@@ -4514,21 +4526,30 @@ onHandlerStateChange={({ nativeEvent }) => {
                   <AntDesign name="download" size={20} color="#fff" />
                 </TouchableOpacity>
 
-                {bannerUri ? (
-                  <TouchableOpacity 
-                    style={styles.actionIconButton}
-                    onPress={() => {
-                      try {
+                {/* Banner on/off or navigate to "Your Banners" */}
+                <TouchableOpacity 
+                  style={styles.actionIconButton}
+                  onPress={async () => {
+                    try {
+                      if (bannerUri) {
+                        // We already have a banner selected → just toggle visibility
                         setIsBannerFocused(false);
                         setBannerEnabled(prev => !prev);
-                      } catch (e) {}
-                    }}
-                    activeOpacity={0.85}
-                    accessibilityLabel={bannerEnabled ? "Hide banner" : "Show banner"}
-                  >
-                    <Feather name="tag" size={20} color="#fff" />
-                  </TouchableOpacity>
-                ) : null}
+                      } else {
+                        // No banner selected → go to Your Banners screen
+                        navigation.navigate('UserBanners');
+                      }
+                    } catch (e) {}
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityLabel={
+                    bannerUri
+                      ? (bannerEnabled ? "Hide banner" : "Show banner")
+                      : "Choose banner"
+                  }
+                >
+                  <Feather name="tag" size={20} color="#fff" />
+                </TouchableOpacity>
                 {/* Menu toggle icon */}
                 <TouchableOpacity
                   style={styles.actionIconButton}
@@ -4940,23 +4961,6 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     <Text style={styles.menuLabelText} numberOfLines={2}>Photo</Text>
                   </TouchableOpacity>
 
-                  {/* Template button: create custom templates */}
-                  <TouchableOpacity 
-                    style={styles.templateButton}
-                    onPress={() => {
-                      try {
-                        handleTemplateButtonPress();
-                      } catch (error) {
-                        console.error('Template button error:', error);
-                      }
-                    }}
-                  >
-                    <View style={styles.menuIconCircle}>
-                      <TemplateSvgIcon color="#000" size={22} />
-                    </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Template</Text>
-                  </TouchableOpacity>
-
                 </View>
               )}
             />
@@ -5018,6 +5022,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
+  },
+  topBarRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTemplateButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#CCCCCC',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  headerTemplatePlus: {
+    fontSize: 20,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  headerTemplateIconCircle: {
+    // kept for backward compatibility (no longer used)
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  headerTemplateLabel: {
+    // kept for backward compatibility (no longer used)
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#000000',
   },
   downloadSpinnerRow: {
     flexDirection: 'row',
@@ -5121,6 +5161,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    marginBottom: 8, // lift menu bar above system navigation
   },
   menuScrollView: {
     flex: 1,
@@ -5172,11 +5213,11 @@ const styles = StyleSheet.create({
   menuLabelText: {
     color: '#000000',
     fontWeight: 'bold',
-    fontSize: 12,
+    fontSize: 14, // Increased for better readability in menu bar
     textAlign: 'center',
     flexWrap: 'wrap',
-    lineHeight: 12,
-    minHeight: 20,
+    lineHeight: 16,
+    minHeight: 22,
     marginTop: 0,
     width: '100%',
   },
