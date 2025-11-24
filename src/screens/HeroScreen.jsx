@@ -4906,8 +4906,8 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     <Text style={[
                       styles.menuLabelText,
                       (isRemovingBackground || !removeBgEnabled) && styles.removeBgButtonTextDisabled
-                    ]} numberOfLines={2}>
-                      {isRemovingBackground ? 'Removing...' : 
+                    ]} numberOfLines={1}>
+                      {isRemovingBackground ? 'Removing...' :
                       (!removeBgEnabled ? 'Rem BG' : 'Rem BG')}
                     </Text>
                   </TouchableOpacity>
@@ -4927,7 +4927,7 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     <View style={styles.menuIconCircle}>
                       <BannerSvgIcon color="#000" size={22} />
                     </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Banner</Text>
+                    <Text style={styles.menuLabelText} numberOfLines={1}>Banner</Text>
                   </TouchableOpacity>
 
                   {/* Text / Photo / Reset */}
@@ -4943,7 +4943,7 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     <View style={styles.menuIconCircle}>
                       <TextSvgIcon color="#000" size={22} />
                     </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Text</Text>
+                    <Text style={styles.menuLabelText} numberOfLines={1}>Text</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
@@ -4958,7 +4958,7 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                     <View style={styles.menuIconCircle}>
                       <PhotoSvgIcon color="#000" size={22} />
                     </View>
-                    <Text style={styles.menuLabelText} numberOfLines={2}>Photo</Text>
+                    <Text style={styles.menuLabelText} numberOfLines={1}>Photo</Text>
                   </TouchableOpacity>
 
                 </View>
@@ -5161,7 +5161,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    marginBottom: 8, // lift menu bar above system navigation
+    marginBottom: 32, // lift menu bar above system navigation
   },
   menuScrollView: {
     flex: 1,
@@ -5215,7 +5215,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14, // Increased for better readability in menu bar
     textAlign: 'center',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     lineHeight: 16,
     minHeight: 22,
     marginTop: 0,
@@ -5362,7 +5362,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: CONTAINER_PADDING,
     paddingTop: 20,

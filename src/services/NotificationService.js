@@ -1,10 +1,8 @@
 import PushNotification from 'react-native-push-notification';
-import {Platform, PermissionsAndroid} from 'react-native';
+import {Platform, PermissionsAndroid, AppState} from 'react-native';
 import AppConfig from '../config/AppConfig';
 
 let onTapCallback = null;
-let pollingInterval = null;
-let lastNotificationId = null;
 let isConfigured = false;
 
 const NotificationService = {
@@ -17,21 +15,37 @@ const NotificationService = {
     }
 
     PushNotification.configure({
-      // Called when a notification is pressed
+      // Called when a remote or local notification is opened or received
       onNotification: function (notification) {
-        console.log('📱 Notification tapped:', notification);
+        console.log('📱 Notification received:', notification);
 
-        // Handle notification tap
-        if (notification.userInteraction && onTapCallback) {
-          const data = {
-            id: notification.id,
-            videoUrl: notification.videoUrl,
-            imageUrl: notification.imageUrl,
-            subcategory: notification.subcategory,
-            mainCategory: notification.mainCategory,
-          };
-          onTapCallback(data);
+        // Only show notification if app is in background/closed
+        const currentAppState = AppState.currentState;
+
+        // For incoming push notifications, they're handled automatically by the system
+        // We only need to handle the tap action here
+        if (notification.userInteraction) {
+          console.log('📱 User tapped notification');
+          if (onTapCallback) {
+            const data = {
+              id: notification.id,
+              videoUrl: notification.data?.videoUrl || notification.videoUrl,
+              imageUrl: notification.data?.imageUrl || notification.imageUrl,
+              subcategory: notification.data?.subcategory || notification.subcategory,
+              mainCategory: notification.data?.mainCategory || notification.mainCategory,
+            };
+            onTapCallback(data);
+          }
+        } else if (currentAppState === 'active') {
+          // If notification arrives while app is open, don't show it
+          console.log('🚫 App is active - notification received but not displayed');
         }
+      },
+
+      // Called when token is generated (for FCM/APNS)
+      onRegister: function (token) {
+        console.log('📱 Device Token:', token);
+        // TODO: Send this token to your server to enable push notifications
       },
 
       // IOS ONLY (optional): default: all - Permissions to register.
@@ -44,13 +58,6 @@ const NotificationService = {
       // Should the initial notification be popped automatically
       popInitialNotification: true,
 
-      /**
-       * (optional) default: true
-       * - Specified if permissions (ios) and token (android and ios) will requested or not,
-       * - if not, you must call PushNotificationsHandler.requestPermissions() later
-       * - if you are not using remote notification or do not have Firebase installed, use this:
-       *     requestPermissions: Platform.OS === 'ios'
-       */
       requestPermissions: Platform.OS === 'ios',
     });
 
@@ -69,7 +76,7 @@ const NotificationService = {
     );
 
     isConfigured = true;
-    console.log('✅ PushNotification configured');
+    console.log('✅ PushNotification configured - ready to receive push notifications');
   },
 
   /**
@@ -99,110 +106,6 @@ const NotificationService = {
     }
   },
 
-  /**
-   * Fetch current notification from server
-   */
-  fetchNotification: async () => {
-    try {
-      const serverUrl = __DEV__
-        ? AppConfig.DEVELOPMENT.DEV_SERVER_URL
-        : AppConfig.PRODUCTION_SERVER_URL;
-
-      const response = await fetch(`${serverUrl}/api/notifications/current`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.notification) {
-        return data.notification;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('❌ Error fetching notification:', error.message);
-      return null;
-    }
-  },
-
-  /**
-   * Display notification using react-native-push-notification
-   */
-  displayNotification: async notification => {
-    try {
-      const notificationConfig = {
-        channelId: 'picstar-channel',
-        title: notification.title,
-        message: notification.message,
-        playSound: true,
-        soundName: 'default',
-        importance: 'high',
-        vibrate: true,
-        vibration: 300,
-        priority: 'high',
-        visibility: 'public',
-        autoCancel: true,
-        largeIcon: 'ic_launcher',
-        smallIcon: 'ic_notification',
-        userInfo: {
-          id: notification.id,
-          videoUrl: notification.videoUrl,
-          imageUrl: notification.imageUrl,
-          subcategory: notification.subcategory,
-          mainCategory: notification.mainCategory,
-        },
-      };
-
-      // Add big picture style if image is available
-      if (notification.imageUrl) {
-        notificationConfig.bigPictureUrl = notification.imageUrl;
-        notificationConfig.largeIconUrl = notification.imageUrl;
-      }
-
-      PushNotification.localNotification(notificationConfig);
-      console.log('✅ Notification displayed:', notification.title);
-
-      return true;
-    } catch (error) {
-      console.error('❌ Error displaying notification:', error);
-      return false;
-    }
-  },
-
-  /**
-   * Poll server for new notifications
-   */
-  startPolling: () => {
-    // Poll every 12 seconds (server generates every 10 seconds)
-    pollingInterval = setInterval(async () => {
-      const notification = await NotificationService.fetchNotification();
-
-      if (notification && notification.id !== lastNotificationId) {
-        // New notification received
-        console.log('🔔 New notification from server:', notification.title);
-        lastNotificationId = notification.id;
-
-        // Display the notification
-        await NotificationService.displayNotification(notification);
-      }
-    }, 12000); // Check every 12 seconds
-
-    console.log('🔄 Notification polling started (every 12 seconds)');
-  },
-
-  /**
-   * Stop polling
-   */
-  stopPolling: () => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      pollingInterval = null;
-      console.log('🛑 Notification polling stopped');
-    }
-  },
 
   /**
    * Start the notification service
@@ -221,17 +124,7 @@ const NotificationService = {
       // Continue anyway - permissions might be granted later
     }
 
-    // Fetch and display initial notification immediately
-    const initialNotification = await NotificationService.fetchNotification();
-    if (initialNotification) {
-      lastNotificationId = initialNotification.id;
-      await NotificationService.displayNotification(initialNotification);
-    }
-
-    // Start polling for new notifications
-    NotificationService.startPolling();
-
-    console.log('✅ NotificationService started successfully');
+    console.log('✅ NotificationService started - ready to receive push notifications');
   },
 
   /**
@@ -240,12 +133,8 @@ const NotificationService = {
   stop: () => {
     console.log('📱 NotificationService stopping...');
 
-    // Stop polling
-    NotificationService.stopPolling();
-
     // Clear callback
     onTapCallback = null;
-    lastNotificationId = null;
 
     // Cancel all notifications
     PushNotification.cancelAllLocalNotifications();
@@ -269,17 +158,31 @@ const NotificationService = {
   sendNotification: async options => {
     console.log('📬 Sending manual notification:', options);
 
-    const notification = {
-      id: Date.now().toString(),
+    // Only for testing - send a local notification
+    PushNotification.localNotification({
+      channelId: 'picstar-channel',
       title: options.title || 'Test Notification',
       message: options.message || 'This is a test notification',
-      videoUrl: options.videoUrl || '',
-      imageUrl: options.imageUrl || '',
-      subcategory: options.subcategory || '',
-      mainCategory: options.mainCategory || '',
-    };
-
-    await NotificationService.displayNotification(notification);
+      playSound: true,
+      soundName: 'default',
+      importance: 'high',
+      vibrate: true,
+      vibration: 300,
+      priority: 'high',
+      visibility: 'public',
+      autoCancel: true,
+      largeIcon: 'ic_launcher',
+      smallIcon: 'ic_notification',
+      bigPictureUrl: options.imageUrl || undefined,
+      largeIconUrl: options.imageUrl || undefined,
+      userInfo: {
+        id: Date.now().toString(),
+        videoUrl: options.videoUrl || '',
+        imageUrl: options.imageUrl || '',
+        subcategory: options.subcategory || '',
+        mainCategory: options.mainCategory || '',
+      },
+    });
   },
 };
 
