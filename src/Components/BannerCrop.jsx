@@ -100,7 +100,8 @@ const parseRatio = (r) => {
 };
 
 const BannerCrop = ({ route, navigation }) => {
-  const { uri, onCropDone, ratio } = route.params || {};
+  const { uri, onCropDone, ratio, sourceScreen } = route.params || {};
+  console.log('📥 BannerCrop: Mounted with sourceScreen:', sourceScreen);
   const viewShotRef = useRef();
 
   // Compute dynamic crop area from ratio (width:height)
@@ -213,8 +214,9 @@ const BannerCrop = ({ route, navigation }) => {
         try { onCropDone({ croppedUri: finalUri, cropType: 'banner' }); } catch {}
       }
 
-      // Also notify via the manager for global listeners
-      try { cropResultManager.setCropResult(finalUri, 'banner'); } catch {}
+      // Also notify via the manager for global listeners - pass sourceScreen
+      console.log('📤 BannerCrop: Sending banner to sourceScreen:', sourceScreen);
+      try { cropResultManager.setCropResult(finalUri, 'banner', null, false, sourceScreen); } catch {}
 
       setTimeout(() => { navigation.goBack(); }, 30);
     } catch (e) {

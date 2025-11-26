@@ -8,7 +8,11 @@ import BannerStorageService from '../services/BannerStorageService';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-export default function BannerCreate({ navigation }) {
+export default function BannerCreate({ navigation, route }) {
+  // Get sourceScreen from navigation params to route banner back to correct HeroScreen instance
+  const sourceScreen = route?.params?.sourceScreen;
+  console.log('📥 BannerCreate: Mounted with sourceScreen:', sourceScreen);
+
   const [shopName, setShopName] = useState('');
   const [address, setAddress] = useState('');
   const [ownerName, setOwnerName] = useState('');
@@ -39,7 +43,9 @@ export default function BannerCreate({ navigation }) {
       if (!uri) return;
       await BannerStorageService.saveBanner(uri);
       const finalUri = uri.includes('?') ? `${uri}&t=${Date.now()}` : `${uri}?t=${Date.now()}`;
-      try { cropResultManager.setCropResult(finalUri, 'banner'); } catch {}
+      // Pass sourceScreen so correct HeroScreen receives the banner
+      console.log('📤 BannerCreate: Sending banner to sourceScreen:', sourceScreen);
+      try { cropResultManager.setCropResult(finalUri, 'banner', null, false, sourceScreen); } catch {}
       navigation.goBack();
     } finally {
       setIsSaving(false);

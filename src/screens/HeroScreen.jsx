@@ -630,6 +630,10 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
 };
 
 const HeroScreen = ({ route, navigation }) => {
+  // Generate unique instance ID for this HeroScreen (used to track banner source)
+  const instanceIdRef = useRef(`hero-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  const instanceId = instanceIdRef.current;
+
   // Hide React Navigation header for this screen
   useLayoutEffect(() => {
     try {
@@ -640,7 +644,7 @@ const HeroScreen = ({ route, navigation }) => {
   }, [navigation]);
   const initialParams = route.params || {};
   const [templateImage, setTemplateImage] = useState(initialParams.image);
-  
+
   // Local mode support for exact replica usage
   const localMode = !!initialParams.localMode;
   const initialLocalTemplates = Array.isArray(initialParams.initialTemplates) ? initialParams.initialTemplates : null;
@@ -2209,11 +2213,15 @@ React.useEffect(() => {
 
 // Component lifecycle tracking
   React.useEffect(() => {
-    
+
     // Listen for crop results from the global manager
     const unsubscribeCropResults = cropResultManager.addListener((cropResult) => {
       try {
         const { croppedUri, photoNumber, photoId, isDynamicPhoto } = cropResult || {};
+        // Skip banner events - they are handled by a separate listener
+        if (photoNumber === 'banner') {
+          return;
+        }
         // Prefer explicit photoId targeting if present
         if (photoId) {
           handleCropComplete({ croppedUri, photoId, isDynamicPhoto });
@@ -2563,10 +2571,21 @@ React.useEffect(() => {
   const [bannerUri, setBannerUri] = useState(null);
   // Focus state for banner (controls showing ✕)
   const [isBannerFocused, setIsBannerFocused] = useState(false);
-  
+
+  // Restore stored banner on mount (handles remount after navigation)
+  React.useEffect(() => {
+    const mySourceType = localMode ? 'localMode' : 'normal';
+    const storedBanner = cropResultManager.getStoredBanner(mySourceType);
+    if (storedBanner && !bannerUri) {
+      console.log('🔄 HeroScreen: Restoring stored banner for', mySourceType, ':', storedBanner?.substring(0, 50) + '...');
+      setBannerUri(storedBanner);
+      setBannerEnabled(true);
+    }
+  }, [localMode]); // Only run on mount (localMode doesn't change)
+
   // Debug: Log banner state changes
   React.useEffect(() => {
-    console.log('\ud83c\udff7\ufe0f HeroScreen: Banner state changed:', {
+    console.log('🏷️ HeroScreen: Banner state changed:', {
       bannerEnabled,
       bannerUri: bannerUri ? bannerUri.substring(0, 80) + '...' : null,
       uriLength: bannerUri?.length || 0,
@@ -2576,49 +2595,90 @@ React.useEffect(() => {
 
   // Listen for banner crop results via global manager (fallback if route callback is dropped)
   React.useEffect(() => {
+    const mySourceType = localMode ? 'localMode' : 'normal';
+    console.log('📥 HeroScreen: Setting up banner listener for localMode:', localMode, 'sourceType:', mySourceType);
     try {
       const remove = cropResultManager.addListener(async (payload) => {
         try {
-          console.log('\ud83c\udfaf HeroScreen: Received cropResultManager event:', payload);
+          console.log('🎯 HeroScreen: Received cropResultManager event:', {
+            photoNumber: payload?.photoNumber,
+            sourceScreen: payload?.sourceScreen,
+            hasUri: !!payload?.croppedUri,
+            myLocalMode: localMode,
+            mySourceType
+          });
           if (!payload) {
-            console.warn('\u26a0\ufe0f HeroScreen: Payload is empty');
+            console.warn('⚠️ HeroScreen: Payload is empty');
             return;
           }
-          const { croppedUri, photoNumber } = payload;
-          console.log('\ud83c\udfaf HeroScreen: Processing banner:', {
+          const { croppedUri, photoNumber, sourceScreen } = payload;
+          // Only handle banner events - other events are handled by the main listener
+          if (photoNumber !== 'banner') {
+            console.log('⏭️ HeroScreen: Skipping non-banner event, photoNumber:', photoNumber);
+            return;
+          }
+
+          // Check if this banner event is for this HeroScreen type (localMode vs normal)
+          // Use sourceScreen from payload first, then fall back to global tracker
+          const expectedSource = sourceScreen || cropResultManager.getSourceScreen();
+          console.log('🔍 HeroScreen: Checking source match:', {
+            expectedSource,
+            mySourceType,
+            match: expectedSource === mySourceType,
+            noSourceSet: !expectedSource
+          });
+
+          // If expectedSource is set, only the matching HeroScreen type should handle it
+          if (expectedSource && expectedSource !== mySourceType) {
+            console.log('🚫 HeroScreen: Ignoring banner event - source mismatch', {
+              expectedSource,
+              mySourceType,
+              localMode
+            });
+            return;
+          }
+
+          console.log('✅ HeroScreen: Processing banner for this instance:', {
             photoNumber,
             croppedUri: croppedUri?.substring(0, 80) + '...',
-            uriLength: croppedUri?.length
+            uriLength: croppedUri?.length,
+            localMode,
+            mySourceType
           });
-          
-          if (photoNumber === 'banner' && croppedUri) {
-            console.log('\u2705 HeroScreen: Setting banner URI:', croppedUri);
+
+          if (croppedUri) {
+            console.log('✅ HeroScreen: Setting banner URI');
             setBannerUri(croppedUri);
             setBannerEnabled(true);
-            console.log('\u2705 HeroScreen: Banner enabled and URI set');
-            
+            // Clear the source screen after successfully handling the event
+            cropResultManager.clearSourceScreen();
+            console.log('✅ HeroScreen: Banner enabled and URI set successfully');
+
             try {
               await dispatch(uploadTemplate({
                 imageUri: croppedUri,
                 category: 'banners',
                 templateData: { name: 'Banner', ratio: '5:1' }
               })).unwrap();
-              console.log('\u2705 HeroScreen: Banner uploaded to cloud');
+              console.log('✅ HeroScreen: Banner uploaded to cloud');
             } catch (err) {
-              console.warn('\u26a0\ufe0f Banner cloud upload failed:', err?.message || err);
+              console.warn('⚠️ Banner cloud upload failed:', err?.message || err);
             }
           } else {
-            console.warn('\u26a0\ufe0f HeroScreen: Not a banner or missing URI:', { photoNumber, hasUri: !!croppedUri });
+            console.warn('⚠️ HeroScreen: Banner missing URI');
           }
         } catch (e) {
-          console.error('\u274c HeroScreen: Error processing banner:', e);
+          console.error('❌ HeroScreen: Error processing banner:', e);
         }
       });
-      return () => { try { remove && remove(); } catch (e) {} };
+      return () => {
+        console.log('📤 HeroScreen: Removing banner listener for localMode:', localMode);
+        try { remove && remove(); } catch (e) {}
+      };
     } catch (e) {
-      console.error('\u274c HeroScreen: Error setting up banner listener:', e);
+      console.error('❌ HeroScreen: Error setting up banner listener:', e);
     }
-  }, []);
+  }, [dispatch, localMode]);
   
   // Menu bar visibility
   const [menuVisible, setMenuVisible] = useState(false);
@@ -4482,6 +4542,8 @@ onHandlerStateChange={({ nativeEvent }) => {
                           setBannerUri(null);
                           setBannerEnabled(false);
                           setIsBannerFocused(false);
+                          // Clear stored banner so it doesn't restore on remount
+                          cropResultManager.clearStoredBanner(localMode ? 'localMode' : 'normal');
                         } catch (e) {}
                       }}
                       activeOpacity={0.8}
@@ -4537,7 +4599,10 @@ onHandlerStateChange={({ nativeEvent }) => {
                         setBannerEnabled(prev => !prev);
                       } else {
                         // No banner selected → go to Your Banners screen
-                        navigation.navigate('UserBanners');
+                        // Pass localMode so banner result comes back to correct HeroScreen type
+                        console.log('🚀 HeroScreen: Navigating to UserBanners with localMode:', localMode);
+                        cropResultManager.setSourceScreen(localMode ? 'localMode' : 'normal');
+                        navigation.navigate('UserBanners', { sourceScreen: localMode ? 'localMode' : 'normal' });
                       }
                     } catch (e) {}
                   }}
@@ -4580,7 +4645,10 @@ onHandlerStateChange={({ nativeEvent }) => {
                             onPress={() => {
                               try {
                                 setShowBannerDialog(false);
-navigation.navigate('BannerCreate', { ratio: '5:1' });
+                                // Pass localMode so banner result comes back to correct HeroScreen type
+                                console.log('🚀 HeroScreen: Navigating to BannerCreate with localMode:', localMode);
+                                cropResultManager.setSourceScreen(localMode ? 'localMode' : 'normal');
+                                navigation.navigate('BannerCreate', { ratio: '5:1', sourceScreen: localMode ? 'localMode' : 'normal' });
                               } catch {}
                             }}
                             activeOpacity={0.85}
@@ -4594,7 +4662,10 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                                 setShowBannerDialog(false);
                                 const picked = await ImagePickerService.pickImageFromGallery();
                                 if (!picked || !picked.uri) return;
-                                navigation.navigate('BannerCrop', { uri: picked.uri, photoNumber: 'banner', ratio: '5:1' });
+                                // Pass localMode so banner result comes back to correct HeroScreen type
+                                console.log('🚀 HeroScreen: Navigating to BannerCrop with localMode:', localMode);
+                                cropResultManager.setSourceScreen(localMode ? 'localMode' : 'normal');
+                                navigation.navigate('BannerCrop', { uri: picked.uri, photoNumber: 'banner', ratio: '5:1', sourceScreen: localMode ? 'localMode' : 'normal' });
                               } catch {}
                             }}
                             activeOpacity={0.85}
@@ -4607,7 +4678,10 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                             onPress={() => {
                               try {
                                 setShowBannerDialog(false);
-                                navigation.navigate('UserBanners');
+                                // Pass localMode so banner result comes back to correct HeroScreen type
+                                console.log('🚀 HeroScreen: Navigating to UserBanners (dialog) with localMode:', localMode);
+                                cropResultManager.setSourceScreen(localMode ? 'localMode' : 'normal');
+                                navigation.navigate('UserBanners', { sourceScreen: localMode ? 'localMode' : 'normal' });
                               } catch {}
                             }}
                             activeOpacity={0.85}
@@ -4624,6 +4698,8 @@ navigation.navigate('BannerCreate', { ratio: '5:1' });
                                 setBannerEnabled(false);
                                 setIsBannerFocused(false);
                                 setShowBannerDialog(false);
+                                // Clear stored banner so it doesn't restore on remount
+                                cropResultManager.clearStoredBanner(localMode ? 'localMode' : 'normal');
                               } catch {}
                             }}
                             activeOpacity={0.85}

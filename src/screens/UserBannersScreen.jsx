@@ -19,7 +19,11 @@ const { width: screenWidth } = Dimensions.get('window');
 const BANNER_WIDTH = screenWidth - 40; // 20px padding on each side
 const BANNER_ASPECT_RATIO = 5; // 5:1 ratio
 
-const UserBannersScreen = ({ navigation }) => {
+const UserBannersScreen = ({ navigation, route }) => {
+  // Get sourceScreen from navigation params to route banner back to correct HeroScreen instance
+  const sourceScreen = route?.params?.sourceScreen;
+  console.log('📥 UserBannersScreen: Mounted with sourceScreen:', sourceScreen);
+
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -102,34 +106,36 @@ const UserBannersScreen = ({ navigation }) => {
 
   const handleUseBanner = (banner) => {
     try {
-      console.log('\ud83c\udfaf Using banner:', {
+      console.log('🎯 UserBannersScreen: Using banner:', {
         id: banner.id,
         uri: banner.uri,
-        filename: banner.filename
+        filename: banner.filename,
+        sourceScreen: sourceScreen
       });
-      
+
       // Format URI properly - ensure it has file:// prefix for React Native Image
-      let formattedUri = banner.uri.startsWith('file://') 
-        ? banner.uri 
+      let formattedUri = banner.uri.startsWith('file://')
+        ? banner.uri
         : `file://${banner.uri}`;
-      
+
       // Add cache-busting parameter to force reload
       const cacheSuffix = `t=${Date.now()}`;
-      formattedUri = formattedUri.includes('?') 
-        ? `${formattedUri}&${cacheSuffix}` 
+      formattedUri = formattedUri.includes('?')
+        ? `${formattedUri}&${cacheSuffix}`
         : `${formattedUri}?${cacheSuffix}`;
-      
-      console.log('\u2705 Formatted banner URI:', formattedUri);
-      
-      // Set the banner as crop result
-      cropResultManager.setCropResult(formattedUri, 'banner');
-      
-      console.log('\u2705 Banner set via cropResultManager');
-      
+
+      console.log('✅ UserBannersScreen: Formatted banner URI:', formattedUri);
+
+      // Set the banner as crop result - pass sourceScreen so correct HeroScreen receives it
+      console.log('📤 UserBannersScreen: Sending banner to sourceScreen:', sourceScreen);
+      cropResultManager.setCropResult(formattedUri, 'banner', null, false, sourceScreen);
+
+      console.log('✅ UserBannersScreen: Banner set via cropResultManager with sourceScreen');
+
       // Navigate back to editor
       navigation.goBack();
     } catch (error) {
-      console.error('\u274c Error using banner:', error);
+      console.error('❌ UserBannersScreen: Error using banner:', error);
       Alert.alert('Error', 'Failed to use banner: ' + error.message);
     }
   };
