@@ -1307,11 +1307,17 @@ const HeroScreen = ({ route, navigation }) => {
       lastUserNameRef.current = finalName;
 
       // Keep the default text element (user name container) in sync as well
+      // BUT skip if user has manually edited the text
       setTextElements(prev => {
         if (!Array.isArray(prev) || prev.length === 0) return prev;
         return prev.map((el, idx) => {
           // Prefer matching the explicit default-text-* id, fall back to first element
           const isDefault = (el.id && el.id.startsWith('default-text-')) || (!el.id && idx === 0);
+          // Skip updating if this text has been manually edited by user
+          if (isDefault && editedTextIdsRef.current.has(el.id)) {
+            console.log('⏭️ Skipping profile name sync for manually edited text:', el.id);
+            return el;
+          }
           return isDefault ? { ...el, text: finalName } : el;
         });
       });
@@ -1689,8 +1695,9 @@ const HeroScreen = ({ route, navigation }) => {
             
             if (isDifferentTemplate) {
               setTextElements(prev => {
-                // Clear the moved text IDs tracking for the new template
+                // Clear the moved and edited text IDs tracking for the new template
                 movedTextIdsRef.current.clear();
+                editedTextIdsRef.current.clear();
                 
                 if (!Array.isArray(prev) || prev.length === 0) {
                   // No text exists - create default at backend position
@@ -2215,13 +2222,31 @@ React.useEffect(() => {
   React.useEffect(() => {
 
     // Listen for crop results from the global manager
+    const mySourceType = localMode ? 'localMode' : 'normal';
+    console.log('📷 HeroScreen: Setting up photo crop listener for sourceType:', mySourceType);
     const unsubscribeCropResults = cropResultManager.addListener((cropResult) => {
       try {
-        const { croppedUri, photoNumber, photoId, isDynamicPhoto } = cropResult || {};
+        const { croppedUri, photoNumber, photoId, isDynamicPhoto, sourceScreen } = cropResult || {};
         // Skip banner events - they are handled by a separate listener
         if (photoNumber === 'banner') {
           return;
         }
+
+        // Filter by sourceScreen to ensure only the correct HeroScreen instance handles the event
+        console.log('📷 HeroScreen: Received photo crop event:', {
+          sourceScreen,
+          mySourceType,
+          match: sourceScreen === mySourceType || !sourceScreen,
+          photoId
+        });
+
+        // If sourceScreen is set, only the matching HeroScreen type should handle it
+        if (sourceScreen && sourceScreen !== mySourceType) {
+          console.log('🚫 HeroScreen: Ignoring photo crop - source mismatch', { sourceScreen, mySourceType });
+          return;
+        }
+
+        console.log('✅ HeroScreen: Processing photo crop for this instance');
         // Prefer explicit photoId targeting if present
         if (photoId) {
           handleCropComplete({ croppedUri, photoId, isDynamicPhoto });
@@ -2288,7 +2313,7 @@ React.useEffect(() => {
       unsubscribeFocus();
       unsubscribeBlur();
     };
-  }, [navigation]);
+  }, [navigation, localMode]);
   
   // Preserve initial route params
   const [initialRouteParams] = useState(initialParams);
@@ -2349,6 +2374,8 @@ React.useEffect(() => {
   const isDraggingRef = React.useRef(false);
   const hasUserMovedStaticPhotoRef = React.useRef(false);
   const movedTextIdsRef = React.useRef(new Set());
+  // Track text IDs that have been manually edited by user (to prevent overwriting with profile name)
+  const editedTextIdsRef = React.useRef(new Set());
   // Track the last template serial number whose axis was applied
   const lastAppliedPhotoAxisSerial = React.useRef(null);
   const lastAppliedTextAxisSerial = React.useRef(null);
@@ -2580,6 +2607,30 @@ React.useEffect(() => {
       console.log('🔄 HeroScreen: Restoring stored banner for', mySourceType, ':', storedBanner?.substring(0, 50) + '...');
       setBannerUri(storedBanner);
       setBannerEnabled(true);
+    }
+  }, [localMode]); // Only run on mount (localMode doesn't change)
+
+  // Restore stored photo on mount (handles remount after navigation)
+  React.useEffect(() => {
+    const mySourceType = localMode ? 'localMode' : 'normal';
+    const storedPhoto = cropResultManager.getStoredPhoto(mySourceType);
+    if (storedPhoto && storedPhoto.croppedUri) {
+      console.log('🔄 HeroScreen: Restoring stored photo for', mySourceType, ':', {
+        photoId: storedPhoto.photoId,
+        photoNumber: storedPhoto.photoNumber
+      });
+      // Apply the stored photo using the same logic as handleCropComplete
+      const { croppedUri, photoId, photoNumber, isDynamicPhoto } = storedPhoto;
+      if (photoId === STATIC_PHOTO_ID || photoNumber === 1) {
+        dispatchPhotoState({ type: 'SET_PHOTO_1', uri: croppedUri });
+        setIsPhoto1Visible(true);
+      } else if (photoNumber === 2) {
+        dispatchPhotoState({ type: 'SET_PHOTO_2', uri: croppedUri });
+      } else if (isDynamicPhoto && photoId) {
+        updatePhotoUri(photoId, croppedUri);
+      }
+      // Clear the stored photo after restoring
+      cropResultManager.clearStoredPhoto(mySourceType);
     }
   }, [localMode]); // Only run on mount (localMode doesn't change)
 
@@ -2818,8 +2869,11 @@ React.useEffect(() => {
   // so we no longer fetch the name from the backend or AsyncStorage here.
 
   const updateTextContent = (textId, newText) => {
-    setTextElements(prev => 
-      prev.map(element => 
+    // Mark this text as manually edited so it won't be overwritten by profile name sync
+    try { editedTextIdsRef.current.add(textId); } catch (e) {}
+    console.log('✏️ Text manually edited:', { textId, newText, editedIds: Array.from(editedTextIdsRef.current) });
+    setTextElements(prev =>
+      prev.map(element =>
         element.id === textId ? { ...element, text: newText } : element
       )
     );
@@ -3969,6 +4023,8 @@ React.useEffect(() => {
       }
       const uri = picked.uri;
       const cropShape = 'square';
+      const mySourceScreen = localMode ? 'localMode' : 'normal';
+      console.log('📷 HeroScreen: Opening Crop for static photo with sourceScreen:', mySourceScreen);
       navigation.navigate('Crop', {
         uri,
         image: uri,
@@ -3977,6 +4033,7 @@ React.useEffect(() => {
         photoId: STATIC_PHOTO_ID,
         isDynamicPhoto: false,
         shape: cropShape,
+        sourceScreen: mySourceScreen,
         onCropDone: (result) => {
           try {
             const cropped = result?.croppedUri || result?.uri || uri;
@@ -3999,6 +4056,8 @@ React.useEffect(() => {
       }
       const uri = picked.uri;
       const cropShape = 'square';
+      const mySourceScreen = localMode ? 'localMode' : 'normal';
+      console.log('📷 HeroScreen: Opening Crop for dynamic photo with sourceScreen:', mySourceScreen);
       navigation.navigate('Crop', {
         uri,
         image: uri,
@@ -4006,6 +4065,7 @@ React.useEffect(() => {
         photoId,
         isDynamicPhoto: true,
         shape: cropShape,
+        sourceScreen: mySourceScreen,
         onCropDone: (result) => {
           try {
             const cropped = result?.croppedUri || result?.uri || uri;

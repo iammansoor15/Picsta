@@ -12,6 +12,12 @@ const lastBannerByType = {
   normal: null,
 };
 
+// Store the last photo crop result for each screen type (persists across remounts)
+const lastPhotoByType = {
+  localMode: null,
+  normal: null,
+};
+
 export const cropResultManager = {
   setCropResult: (croppedUri, photoNumber = null, photoId = null, isDynamicPhoto = false, sourceScreen = null) => {
     const payload = { croppedUri, photoNumber, photoId, isDynamicPhoto, sourceScreen };
@@ -21,6 +27,12 @@ export const cropResultManager = {
     if (photoNumber === 'banner' && croppedUri && sourceScreen) {
       lastBannerByType[sourceScreen] = croppedUri;
       console.log('💾 CropResultManager: Stored banner for', sourceScreen, ':', croppedUri?.substring(0, 50) + '...');
+    }
+
+    // If this is a photo (not banner), store it for the target screen type so it persists across remounts
+    if (photoNumber !== 'banner' && croppedUri && sourceScreen) {
+      lastPhotoByType[sourceScreen] = { croppedUri, photoNumber, photoId, isDynamicPhoto };
+      console.log('💾 CropResultManager: Stored photo for', sourceScreen, ':', { photoId, photoNumber });
     }
 
     try {
@@ -63,5 +75,16 @@ export const cropResultManager = {
   clearStoredBanner: (screenType) => {
     console.log('🗑️ CropResultManager.clearStoredBanner for', screenType);
     lastBannerByType[screenType] = null;
+  },
+  // Get stored photo for a screen type (for restoring after remount)
+  getStoredPhoto: (screenType) => {
+    const photo = lastPhotoByType[screenType];
+    console.log('📦 CropResultManager.getStoredPhoto for', screenType, ':', photo ? 'found' : 'none');
+    return photo;
+  },
+  // Clear stored photo for a screen type
+  clearStoredPhoto: (screenType) => {
+    console.log('🗑️ CropResultManager.clearStoredPhoto for', screenType);
+    lastPhotoByType[screenType] = null;
   },
 };

@@ -78,7 +78,8 @@ const CROP_SIZE = Math.min(screenWidth * 0.9, screenHeight * 0.6);
 const INITIAL_IMAGE_SIZE = CROP_SIZE * 1.2;
 
 const Crop = ({ route, navigation }) => {
-  const { uri, photoNumber, photoId, isDynamicPhoto, onCropDone, shape: initialShape } = route.params || {};
+  const { uri, photoNumber, photoId, isDynamicPhoto, onCropDone, shape: initialShape, sourceScreen } = route.params || {};
+  console.log('📷 Crop: Mounted with sourceScreen:', sourceScreen);
   const viewShotRef = useRef();
 
   // Gesture shared values - start with smaller scale so user can see full image
@@ -238,7 +239,8 @@ const Crop = ({ route, navigation }) => {
 
       // Always also notify via the global manager to avoid any navigation param/function issues
       try {
-        cropResultManager.setCropResult(finalUri, photoNumber, photoId, !!isDynamicPhoto);
+        console.log('📤 Crop: Sending crop result with sourceScreen:', sourceScreen);
+        cropResultManager.setCropResult(finalUri, photoNumber, photoId, !!isDynamicPhoto, sourceScreen);
       } catch (e) {
         console.warn('Failed to set crop result via manager:', e?.message || e);
       }

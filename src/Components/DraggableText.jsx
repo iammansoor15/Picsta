@@ -75,10 +75,22 @@ const DraggableText = ({
   const [currentText, setCurrentText] = useState(textElement.text);
   const [isResizing, setIsResizing] = useState(false);
 
+  // Debug: Log initial text
+  console.log('📝 DraggableText: Render with text:', { id: textElement.id, text: currentText, propText: textElement.text, isEditing });
+
   // Keep displayed text in sync when parent updates textElement.text (e.g., Redux name change)
   // but do NOT override while the user is actively editing.
   useEffect(() => {
-    if (!isEditing && textElement.text !== currentText) {
+    const willUpdate = !isEditing && textElement.text !== currentText;
+    console.log('🔄 DraggableText: Text sync check:', {
+      id: textElement.id,
+      isEditing,
+      propText: textElement.text,
+      currentText,
+      willUpdate
+    });
+    if (willUpdate) {
+      console.log('🔄 DraggableText: Syncing text from prop:', textElement.text);
       setCurrentText(textElement.text || '');
     }
   }, [textElement.text, isEditing]);
@@ -290,11 +302,24 @@ const DraggableText = ({
 
   // Handle text editing
   const handleTextChange = () => {
-    if (currentText.trim() === '') {
+    const trimmedText = currentText.trim();
+    console.log('💾 DraggableText: handleTextChange called:', {
+      id: textElement.id,
+      currentText,
+      trimmedText,
+      isEmpty: trimmedText === '',
+      willDelete: trimmedText === '',
+      hasOnTextChange: !!onTextChange
+    });
+
+    if (trimmedText === '') {
+      console.log('🗑️ DraggableText: Text is empty, calling onDelete');
       onDelete && onDelete(textElement.id);
     } else {
-      onTextChange && onTextChange(textElement.id, currentText.trim());
+      console.log('✅ DraggableText: Calling onTextChange with:', trimmedText);
+      onTextChange && onTextChange(textElement.id, trimmedText);
     }
+    console.log('🔒 DraggableText: Exiting edit mode');
     setIsEditing(false);
     if (onUnfocus) {
       onUnfocus(textElement.id);
@@ -366,10 +391,28 @@ const DraggableText = ({
 
   // Unfocus when another container is selected
   useEffect(() => {
+    console.log('🔓 DraggableText: Focus state changed:', {
+      id: textElement.id,
+      isFocused,
+      isEditing,
+      willExitEdit: !isFocused && isEditing
+    });
     if (!isFocused && isEditing) {
+      console.log('🔓 DraggableText: Lost focus while editing - SAVING TEXT FIRST then exiting edit mode');
+      // CRITICAL: Save text BEFORE exiting edit mode to prevent text sync from resetting it
+      const trimmedText = currentText.trim();
+      if (trimmedText === '') {
+        console.log('🗑️ DraggableText: Text is empty on unfocus, calling onDelete');
+        onDelete && onDelete(textElement.id);
+      } else if (trimmedText !== textElement.text) {
+        console.log('✅ DraggableText: Saving changed text on unfocus:', trimmedText);
+        onTextChange && onTextChange(textElement.id, trimmedText);
+      } else {
+        console.log('⏭️ DraggableText: Text unchanged on unfocus, skipping save');
+      }
       setIsEditing(false);
     }
-  }, [isFocused]);
+  }, [isFocused, isEditing, currentText, textElement.id, textElement.text, onTextChange, onDelete]);
   
   // Update container dimensions when textElement changes (from parent)
   useEffect(() => {
@@ -482,8 +525,14 @@ const DraggableText = ({
               },
             ]}
             value={currentText}
-            onChangeText={setCurrentText}
-            onBlur={handleTextChange}
+            onChangeText={(text) => {
+              console.log('⌨️ DraggableText: Text input changed:', { id: textElement.id, newText: text, oldText: currentText });
+              setCurrentText(text);
+            }}
+            onBlur={() => {
+              console.log('👋 DraggableText: TextInput blur - calling handleTextChange', { id: textElement.id, currentText });
+              handleTextChange();
+            }}
             multiline
             autoFocus
             pointerEvents="auto"
@@ -493,11 +542,19 @@ const DraggableText = ({
             style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
             activeOpacity={0.7}
             onPress={() => {
+              console.log('👆 DraggableText: Tapped:', {
+                id: textElement.id,
+                isFocused,
+                isEditing,
+                action: isFocused ? 'entering edit mode' : 'focusing'
+              });
               if (isFocused) {
                 // Already focused - enter edit mode
+                console.log('✏️ DraggableText: Entering edit mode');
                 setIsEditing(true);
               } else {
                 // Not focused yet - focus first
+                console.log('🎯 DraggableText: Requesting focus');
                 if (onFocus) {
                   onFocus(textElement.id);
                 }
