@@ -61,7 +61,7 @@ import { uploadTemplate } from '../store/slices/cloudinaryTemplateSlice';
 import { computeDefaultPositions } from '../utils/DefaultPositions';
 import { selectProfileImage, selectOriginalProfileImage, selectProfileDisplayName } from '../store/slices/profileSlice';
 import ProfileImageStatusService from '../services/ProfileImageStatusService';
-import { selectCategories, loadCategories } from '../store/slices/categorySlice';
+import { selectCategories, loadCategories, fetchCategoriesFromServer } from '../store/slices/categorySlice';
 import { loadTemplatesByCategory } from '../store/slices/cloudinaryTemplateSlice';
 import { selectReligion as selectGlobalReligion, selectSubcategory as selectGlobalSub, setSubcategory as setGlobalSub, setReligion as setGlobalReligion, loadMainSubFromStorage, saveMainSubToStorage } from '../store/slices/mainCategorySlice';
 import TemplateService from '../services/TemplateService';
@@ -1772,9 +1772,13 @@ const HeroScreen = ({ route, navigation }) => {
   }, [handleSerialDown]);
 
 
-// Load categories and then templates across all categories for reels
+// Load categories from local storage, then fetch from server for new subcategories
   React.useEffect(() => {
-    try { dispatch(loadCategories()); } catch {}
+    try {
+      dispatch(loadCategories());
+      // After loading local, fetch from server to get any new categories (force refresh)
+      dispatch(fetchCategoriesFromServer(true));
+    } catch {}
   }, [dispatch]);
 
 React.useEffect(() => {
