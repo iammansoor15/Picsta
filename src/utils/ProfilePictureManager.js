@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNFS from 'react-native-fs';
 import ProfilePictureStorageService from '../services/ProfilePictureStorageService';
+import ProfilePhotoService from '../services/ProfilePhotoService';
 
 // Storage keys
 const PROFILE_IMAGES_KEY = '@narayana_profile_images';
@@ -71,7 +72,22 @@ export const clearAllProfilePictures = async (dispatch) => {
 export const clearAllProfileData = async (dispatch) => {
   try {
     console.log('🧹 ProfilePictureManager: Starting COMPREHENSIVE profile data cleanup...');
-    
+
+    // Step 0: Delete profile photo from server
+    console.log('🌐 Step 0: Deleting profile photo from server...');
+    try {
+      const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
+      if (token) {
+        await ProfilePhotoService.deleteProfilePhoto(token);
+        console.log('✅ Profile photo deleted from server');
+      } else {
+        console.log('⚠️ No auth token found, skipping server deletion');
+      }
+    } catch (serverError) {
+      console.log('⚠️ Could not delete from server:', serverError.message);
+      // Continue with local cleanup even if server deletion fails
+    }
+
     // Step 1: Clear Redux store and cached data
     console.log('🔄 Step 1: Clearing Redux store and cached data...');
     // Import and use the thunk directly
@@ -86,17 +102,41 @@ export const clearAllProfileData = async (dispatch) => {
       TEMPLATES_STORAGE_KEY,
       '@narayana_profile_picture_uri',
       '@profile_picture_original',
-      '@profile_picture_no_bg', 
+      '@profile_picture_no_bg',
       '@profile_picture_metadata',
       '@narayana_profile_images',
       '@narayana_templates'
     ];
-    
-    await Promise.all(asyncStorageKeys.map(key => 
-      AsyncStorage.removeItem(key).catch(err => 
+
+    await Promise.all(asyncStorageKeys.map(key =>
+      AsyncStorage.removeItem(key).catch(err =>
         console.log(`⚠️ Could not remove ${key}:`, err.message)
       )
     ));
+
+    // Step 2b: Clear profilePhotoUrl from cached user data
+    console.log('🗑️ Step 2b: Clearing profilePhotoUrl from cached user data...');
+    try {
+      const userKeys = ['user', 'AUTH_USER'];
+      for (const key of userKeys) {
+        const userJson = await AsyncStorage.getItem(key);
+        if (userJson) {
+          try {
+            const user = JSON.parse(userJson);
+            if (user) {
+              user.profilePhotoUrl = null;
+              user.profile_photo_url = null;
+              await AsyncStorage.setItem(key, JSON.stringify(user));
+              console.log(`✅ Cleared profilePhotoUrl from ${key}`);
+            }
+          } catch (e) {
+            console.log(`⚠️ Could not update ${key}:`, e.message);
+          }
+        }
+      }
+    } catch (e) {
+      console.log('⚠️ Could not clear cached user photo URL:', e.message);
+    }
     
     // Step 3: Clear UserAssetsService files (/assets/user)
     console.log('📁 Step 3: Clearing UserAssetsService files...');
