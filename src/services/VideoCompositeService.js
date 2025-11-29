@@ -141,12 +141,16 @@ class VideoCompositeService {
   async compositeVideo(options) {
     const startTime = Date.now();
     const requestId = `app_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    
+
     const {
       videoUrl,
       photos = [],
       texts = [],
       bannerUri = null,
+      bannerX = 0,
+      bannerY = 0,
+      bannerWidth = null,
+      bannerHeight = null,
       containerWidth,
       containerHeight
     } = options;
@@ -215,7 +219,13 @@ class VideoCompositeService {
             fontSize: t.fontSize || 24,
             color: t.color || '#FFFFFF'
           })),
-          banner: processedBannerUri ? { uri: processedBannerUri } : null
+          banner: processedBannerUri ? {
+            uri: processedBannerUri,
+            x: Math.round(bannerX),
+            y: Math.round(bannerY),
+            width: Math.round(bannerWidth || containerWidth),
+            height: Math.round(bannerHeight || containerWidth / 5)
+          } : null
         },
         dimensions: {
           width: Math.round(containerWidth),

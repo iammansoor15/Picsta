@@ -3297,6 +3297,10 @@ React.useEffect(() => {
               photos,
               texts,
               bannerUri: effectiveBannerUri,
+              bannerX: 0,
+              bannerY: 0,
+              bannerWidth: Math.round(containerWidth),
+              bannerHeight: Math.round(containerWidth / 5),
               containerWidth: Math.round(containerWidth),
               containerHeight: Math.round(containerHeight),
             });
@@ -3478,6 +3482,10 @@ React.useEffect(() => {
                 photos,
                 texts,
                 bannerUri: effectiveBannerUri,
+                bannerX: 0,
+                bannerY: 0,
+                bannerWidth: Math.round(containerWidth),
+                bannerHeight: Math.round(containerWidth / 5),
                 containerWidth: Math.round(containerWidth),
                 containerHeight: Math.round(containerHeight),
               });
