@@ -1,4 +1,4 @@
-package com.narauna.narayna
+package com.codebinary.winter
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -22,10 +22,10 @@ class MainApplication : Application(), ReactApplication {
 
         override fun getJSMainModuleName(): String = "index"
 
-        override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
+        override fun getUseDeveloperSupport(): Boolean = com.codebinary.winter.BuildConfig.DEBUG
 
-        override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
-        override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
+        override val isNewArchEnabled: Boolean = com.codebinary.winter.BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+        override val isHermesEnabled: Boolean = com.codebinary.winter.BuildConfig.IS_HERMES_ENABLED
       }
 
   override val reactHost: ReactHost

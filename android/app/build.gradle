@@ -14,16 +14,22 @@ android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
-    
 
-    namespace "com.narauna.narayna"
+
+    namespace "com.codebinary.winter"
     defaultConfig {
-        applicationId "com.narauna.narayna"
+        applicationId "com.codebinary.winter"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.0"
         multiDexEnabled true
+        buildConfigField("boolean", "IS_NEW_ARCHITECTURE_ENABLED", (findProperty("newArchEnabled") ?: "false").toString())
+        buildConfigField("boolean", "IS_HERMES_ENABLED", (enableHermes).toString())
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     // Load signing properties from gradle.properties
@@ -52,12 +58,14 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            buildConfigField("boolean", "DEBUG", "true")
         }
         release {
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            buildConfigField("boolean", "DEBUG", "false")
         }
     }
 }
@@ -73,6 +81,18 @@ dependencies {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
+    }
+}
+
+// Ensure Kotlin can see generated BuildConfig
+afterEvaluate {
+    def compileDebugKotlin = tasks.findByName("compileDebugKotlin")
+    if (compileDebugKotlin) {
+        compileDebugKotlin.dependsOn("generateDebugBuildConfig")
+    }
+    def compileReleaseKotlin = tasks.findByName("compileReleaseKotlin")
+    if (compileReleaseKotlin) {
+        compileReleaseKotlin.dependsOn("generateReleaseBuildConfig")
     }
 }
 

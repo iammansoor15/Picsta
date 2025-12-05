@@ -79,7 +79,6 @@ const CustomHeader = ({
       <StatusBar
         barStyle={backgroundColor === COLORS.white ? 'dark-content' : 'light-content'}
         backgroundColor={backgroundColor}
-        translucent
       />
       <View
         style={[

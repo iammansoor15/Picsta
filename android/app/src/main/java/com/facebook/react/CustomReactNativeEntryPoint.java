@@ -18,11 +18,11 @@ public class CustomReactNativeEntryPoint {
       throw new RuntimeException(error);
     }
 
-    if (com.narauna.narayna.BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+    if (com.codebinary.winter.BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
       DefaultNewArchitectureEntryPoint.load();
     }
 
-    if (com.narauna.narayna.BuildConfig.IS_EDGE_TO_EDGE_ENABLED) {
+    if (com.codebinary.winter.BuildConfig.IS_EDGE_TO_EDGE_ENABLED) {
       WindowUtilKt.setEdgeToEdgeFeatureFlagOn();
     }
   }

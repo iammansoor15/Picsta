@@ -12,15 +12,19 @@
         <domain includeSubdomains="false">192.168.1.46</domain>
         <domain includeSubdomains="false">192.168.1.36</domain>
         <domain includeSubdomains="false">192.168.1.43</domain>
+        
         <domain includeSubdomains="false">192.168.1.35</domain>
-        <domain includeSubdomains="false">192.168.1.75</domain>
+        <domain includeSubdomains="false">192.168.1.76</domain>
         <domain includeSubdomains="false">192.168.1.126</domain>
+
+
 
 
         <!-- Allow common local network IPs for development -->
         <domain includeSubdomains="false">192.168.1.1</domain>
         <domain includeSubdomains="false">192.168.0.1</domain>
         <domain includeSubdomains="false">10.0.0.1</domain>
+
         <!-- Allow production server IP -->
     </domain-config>
     
@@ -28,5 +32,7 @@
     <domain-config>
         <domain includeSubdomains="true">picstar-server.onrender.com</domain>
         <domain includeSubdomains="true">onrender.com</domain>
+        <domain includeSubdomains="true">codebinary.in</domain>
+
     </domain-config>
 </network-security-config>

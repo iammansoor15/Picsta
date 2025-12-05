@@ -25,7 +25,9 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   Alert,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CustomAlert from '../Components/CustomAlert';
 import Reanimated, {
   useSharedValue,
@@ -630,6 +632,12 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
 };
 
 const HeroScreen = ({ route, navigation }) => {
+  // Safe area insets to avoid overlapping the status bar (especially on notch devices)
+  const insets = useSafeAreaInsets();
+  const statusBarOffset = Platform.OS === 'android'
+    ? (StatusBar.currentHeight || insets.top || 0)
+    : (insets.top || 0);
+
   // Generate unique instance ID for this HeroScreen (used to track banner source)
   const instanceIdRef = useRef(`hero-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   const instanceId = instanceIdRef.current;
@@ -1710,7 +1718,7 @@ const HeroScreen = ({ route, navigation }) => {
                     y: tY,
                     width: tWidth,
                     height: tHeight,
-                    color: COLORS.white,
+                    color: '#000000',
                     fontWeight: 'bold',
                     textAlign: 'center',
                     backgroundColor: 'rgba(0, 0, 0, 0.8)'
@@ -2849,7 +2857,7 @@ React.useEffect(() => {
       y: safeY,
       width: estimatedTextWidth,
       height: estimatedTextHeight,
-      color: COLORS.white,
+      color: '#000000',
       fontWeight: 'bold',
       textAlign: 'center',
       backgroundColor: 'rgba(0, 0, 0, 0.8)'
@@ -4230,7 +4238,7 @@ React.useEffect(() => {
   return (
     <>
       <View style={{ flex: 1 }}>
-        
+
         {/* Top row: Category tabs (left) and Profile photo (right) */}
         {!localMode && (
         <View style={styles.topBarRow}>
@@ -5168,7 +5176,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 12,
     paddingBottom: 8,
   },
   topBarRightRow: {

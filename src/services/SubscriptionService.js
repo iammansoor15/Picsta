@@ -44,6 +44,12 @@ const SubscriptionService = {
 
         if (expiryDate > now) {
           console.log('✅ [SUBSCRIPTION] Active (from cache), expires:', expiryDate.toISOString());
+
+          // Start background refresh but don't wait for it
+          this._refreshSubscriptionInBackground().catch(err => {
+            console.warn('⚠️ [SUBSCRIPTION] Background refresh failed:', err.message);
+          });
+
           return {
             active: true,
             status: 'active',
@@ -58,7 +64,7 @@ const SubscriptionService = {
         }
       }
 
-      // Check with server
+      // Check with server with shorter timeout (5 seconds instead of default 15)
       const token = await getToken();
       if (!token) {
         console.log('⚠️ [SUBSCRIPTION] No auth token found');
@@ -66,43 +72,60 @@ const SubscriptionService = {
       }
 
       const baseUrl = getBaseUrl();
-      const response = await fetch(`${baseUrl}/api/auth/subscription-status`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
 
-      if (!response.ok) {
-        console.error('❌ [SUBSCRIPTION] Server returned:', response.status);
-        return { active: false, status: 'none', currentPeriodEnd: null };
-      }
+      // Add timeout to prevent long delays
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-      const data = await response.json();
+      try {
+        const response = await fetch(`${baseUrl}/api/auth/subscription-status`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal,
+        });
 
-      if (data.success && data.data) {
-        console.log('✅ [SUBSCRIPTION] Status from server:', data.data.status);
+        clearTimeout(timeoutId);
 
-        // Update local cache
-        if (data.data.active && data.data.currentPeriodEnd) {
-          await AsyncStorage.setItem('subscriptionActive', 'true');
-          await AsyncStorage.setItem('subscriptionExpiry', data.data.currentPeriodEnd);
-          console.log('💾 [SUBSCRIPTION] Cached until:', data.data.currentPeriodEnd);
-        } else {
-          await AsyncStorage.removeItem('subscriptionActive');
-          await AsyncStorage.removeItem('subscriptionExpiry');
+        if (!response.ok) {
+          console.error('❌ [SUBSCRIPTION] Server returned:', response.status);
+          return { active: false, status: 'none', currentPeriodEnd: null };
         }
 
-        return {
-          active: data.data.active,
-          status: data.data.status,
-          currentPeriodEnd: data.data.currentPeriodEnd,
-          fromCache: false,
-        };
-      }
+        const data = await response.json();
 
-      return { active: false, status: 'none', currentPeriodEnd: null };
+        if (data.success && data.data) {
+          console.log('✅ [SUBSCRIPTION] Status from server:', data.data.status);
+
+          // Update local cache
+          if (data.data.active && data.data.currentPeriodEnd) {
+            await AsyncStorage.setItem('subscriptionActive', 'true');
+            await AsyncStorage.setItem('subscriptionExpiry', data.data.currentPeriodEnd);
+            console.log('💾 [SUBSCRIPTION] Cached until:', data.data.currentPeriodEnd);
+          } else {
+            await AsyncStorage.removeItem('subscriptionActive');
+            await AsyncStorage.removeItem('subscriptionExpiry');
+          }
+
+          return {
+            active: data.data.active,
+            status: data.data.status,
+            currentPeriodEnd: data.data.currentPeriodEnd,
+            fromCache: false,
+          };
+        }
+
+        return { active: false, status: 'none', currentPeriodEnd: null };
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          console.error('❌ [SUBSCRIPTION] Request timeout after 5 seconds');
+          throw new Error('Subscription check timeout');
+        }
+        throw fetchError;
+      }
     } catch (error) {
       console.error('❌ [SUBSCRIPTION] Error checking status:', error.message);
       // On error, check cache as fallback
@@ -118,6 +141,49 @@ const SubscriptionService = {
       }
 
       return { active: false, status: 'none', currentPeriodEnd: null };
+    }
+  },
+
+  /**
+   * Refresh subscription status in background (non-blocking)
+   * @private
+   */
+  async _refreshSubscriptionInBackground() {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const baseUrl = getBaseUrl();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(`${baseUrl}/api/auth/subscription-status`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          if (data.data.active && data.data.currentPeriodEnd) {
+            await AsyncStorage.setItem('subscriptionActive', 'true');
+            await AsyncStorage.setItem('subscriptionExpiry', data.data.currentPeriodEnd);
+            console.log('🔄 [SUBSCRIPTION] Background refresh completed');
+          } else {
+            await AsyncStorage.removeItem('subscriptionActive');
+            await AsyncStorage.removeItem('subscriptionExpiry');
+          }
+        }
+      }
+    } catch (error) {
+      // Silently fail for background refresh
+      console.log('⚠️ [SUBSCRIPTION] Background refresh failed:', error.message);
     }
   },
 

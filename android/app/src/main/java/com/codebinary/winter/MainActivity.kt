@@ -1,4 +1,4 @@
-package com.narauna.narayna
+package com.codebinary.winter
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

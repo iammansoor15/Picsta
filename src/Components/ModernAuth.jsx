@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Alert, 
-  KeyboardAvoidingView, 
-  Platform, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
   Animated,
   ActivityIndicator,
@@ -15,6 +15,7 @@ import {
   StatusBar
 } from 'react-native';
 import AuthService from '../services/AuthService';
+import SubscriptionService from '../services/SubscriptionService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TOKEN_KEY = 'AUTH_TOKEN';
@@ -125,24 +126,56 @@ export default function ModernAuth({ navigation }) {
 
   const onSubmit = async () => {
     if (!validate()) return;
-    
+
     try {
       setLoading(true);
-      
+
       if (mode === 'register') {
         const payload = inferPayload(identifier, { name, password });
         const data = await AuthService.register(payload);
         await AsyncStorage.setItem(TOKEN_KEY, data.token);
+        await AsyncStorage.setItem('authToken', data.token);
         await AsyncStorage.setItem('AUTH_USER', JSON.stringify(data.user || {}));
-        Alert.alert('🎉 Welcome!', `Account created successfully, ${data.user.name}!`);
-        navigation.goBack();
+
+        // Check subscription status
+        const subscription = await SubscriptionService.checkSubscriptionStatus();
+
+        // Navigate based on subscription status
+        const targetScreen = subscription.active ? 'HeroScreen' : 'SubscriptionGate';
+        Alert.alert('🎉 Welcome!', `Account created successfully, ${data.user.name}!`, [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: targetScreen }],
+              });
+            },
+          },
+        ]);
       } else {
         const payload = inferPayload(identifier, { password });
         const data = await AuthService.login(payload);
         await AsyncStorage.setItem(TOKEN_KEY, data.token);
+        await AsyncStorage.setItem('authToken', data.token);
         await AsyncStorage.setItem('AUTH_USER', JSON.stringify(data.user || {}));
-        Alert.alert('👋 Welcome back!', `Hello, ${data.user.name}!`);
-        navigation.goBack();
+
+        // Check subscription status
+        const subscription = await SubscriptionService.checkSubscriptionStatus();
+
+        // Navigate based on subscription status
+        const targetScreen = subscription.active ? 'HeroScreen' : 'SubscriptionGate';
+        Alert.alert('👋 Welcome back!', `Hello, ${data.user.name}!`, [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: targetScreen }],
+              });
+            },
+          },
+        ]);
       }
     } catch (e) {
       Alert.alert('❌ Error', e.message || 'Something went wrong. Please try again.');

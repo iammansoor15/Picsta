@@ -217,7 +217,8 @@ class VideoCompositeService {
             x: Math.round(t.x || 0),
             y: Math.round(t.y || 0),
             fontSize: t.fontSize || 24,
-            color: t.color || '#FFFFFF'
+            // Default to black text if no explicit color is provided
+            color: t.color || '#000000'
           })),
           banner: processedBannerUri ? {
             uri: processedBannerUri,

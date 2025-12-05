@@ -96,7 +96,7 @@
 -keep class fr.bamlab.rnimageresizer.** { *; }
 
 # Keep your app's classes
--keep class com.narauna.narayna.** { *; }
+-keep class com.codebinary.winter.** { *; }
 
 # Generic keeps for reflection
 -keepclassmembers class * {

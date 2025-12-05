@@ -519,7 +519,7 @@ const DraggableText = ({
               styles.textInput,
               {
                 fontSize: Math.max(12, Math.min(36, containerDimensions.width * 0.15)), // Scale with container width
-                color: textElement.color || 'white',
+                color: textElement.color || 'black',
                 fontWeight: textElement.fontWeight || 'normal',
                 textAlign: textElement.textAlign || 'center',
               },
@@ -566,7 +566,7 @@ const DraggableText = ({
                 styles.textDisplay,
                 {
                   fontSize: Math.max(12, Math.min(36, containerDimensions.width * 0.15)), // Scale with container width
-                  color: textElement.color || 'white',
+                  color: textElement.color || 'black',
                   fontWeight: textElement.fontWeight || 'normal',
                   textAlign: textElement.textAlign || 'center',
                 },
@@ -757,7 +757,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     padding: 0,
     backgroundColor: 'transparent',
-    color: 'white',
+    color: 'black',
     minWidth: 60,
   },
   textDisplay: {

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(move \"C:\\Picstar\\Picsta\\android\\app\\src\\main\\java\\com\\narauna\\narayna\\MainActivity.kt\" \"C:\\Picstar\\Picsta\\android\\app\\src\\main\\java\\com\\winter\\app\\MainActivity.kt\")",
+      "Bash(find:*)",
+      "Bash(./gradlew clean:*)",
+      "Bash(grep:*)",
+      "Bash(move:*)",
+      "Bash(npx react-native-clean-project)",
+      "Bash(tree:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
