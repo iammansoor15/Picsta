@@ -10,6 +10,19 @@ import {
   Platform,
   FlatList,
 } from 'react-native';
+import Svg, { Path, Circle, Rect } from 'react-native-svg';
+
+// Shape icon with triangle, circle, and square
+const ShapeSvgIcon = ({ size = 28, color = '#000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    {/* Triangle */}
+    <Path d="M8 4l4 7H4l4-7z" fill={color} />
+    {/* Circle */}
+    <Circle cx="17" cy="8" r="3.5" fill={color} />
+    {/* Square */}
+    <Rect x="4" y="14" width="7" height="7" fill={color} />
+  </Svg>
+);
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -138,9 +151,7 @@ const ShapeDropdownFixed = ({ selectedShape, onShapeChange, style }) => {
         testID="shape-dropdown-button"
       >
         <View style={styles.menuIconCircle}>
-          <Text style={styles.menuIconGlyph}>
-            {selectedShapeData ? selectedShapeData.icon : '⬜'}
-          </Text>
+          <ShapeSvgIcon size={22} color="#000" />
         </View>
         <Text style={styles.menuLabelText}>Shape</Text>
       </TouchableOpacity>

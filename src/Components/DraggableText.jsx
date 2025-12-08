@@ -14,6 +14,7 @@ import Reanimated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
+import { COLORS } from '../theme/colors';
 
 const DraggableText = ({ 
   textElement, 
@@ -519,7 +520,7 @@ const DraggableText = ({
               styles.textInput,
               {
                 fontSize: Math.max(12, Math.min(36, containerDimensions.width * 0.15)), // Scale with container width
-                color: textElement.color || 'black',
+                color: textElement.color || COLORS.primary,
                 fontWeight: textElement.fontWeight || 'normal',
                 textAlign: textElement.textAlign || 'center',
               },
@@ -566,7 +567,7 @@ const DraggableText = ({
                 styles.textDisplay,
                 {
                   fontSize: Math.max(12, Math.min(36, containerDimensions.width * 0.15)), // Scale with container width
-                  color: textElement.color || 'black',
+                  color: textElement.color || COLORS.primary,
                   fontWeight: textElement.fontWeight || 'normal',
                   textAlign: textElement.textAlign || 'center',
                 },
@@ -757,7 +758,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     padding: 0,
     backgroundColor: 'transparent',
-    color: 'black',
+    color: COLORS.primary,
     minWidth: 60,
   },
   textDisplay: {

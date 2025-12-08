@@ -89,24 +89,32 @@ const BannerSvgIcon = ({ size = 28, color = '#000' }) => (
 
 const TextSvgIcon = ({ size = 28, color = '#000' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path d="M4 6h16" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    <Path d="M12 6v12" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    {/* Capital A */}
+    <Path d="M7 17L10 7h1l3 10M8 14h4" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Lowercase a */}
+    <Path d="M16 17v-4a2 2 0 1 1 4 0v4M20 15h-4" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Cursor line */}
+    <Path d="M22 8v9" stroke={color} strokeWidth={1.5} strokeLinecap="round" />
   </Svg>
 );
 
 const PhotoSvgIcon = ({ size = 28, color = '#000' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Rect x="3" y="5" width="18" height="14" rx="2" stroke={color} strokeWidth={2} />
-    <Circle cx="8.5" cy="10" r="1.5" fill={color} />
-    <Path d="M21 16l-5.5-5.5L9 17l-3-3-4 4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Camera body */}
+    <Path d="M3 9a2 2 0 0 1 2-2h1l1-2h6l1 2h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Camera lens circle */}
+    <Circle cx="10" cy="13" r="3" stroke={color} strokeWidth={1.8} />
+    {/* Plus sign */}
+    <Path d="M19 3v4M17 5h4" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
   </Svg>
 );
 
 const WandSvgIcon = ({ size = 28, color = '#000' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path d="M3 21l10-10" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    <Path d="M14 3l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" fill={color} />
-    <Path d="M18 6l.5 1 .9.5-.9.5-.5 1-.5-1-.9-.5.9-.5.5-1z" fill={color} />
+    {/* Head circle */}
+    <Circle cx="12" cy="7" r="4" stroke={color} strokeWidth={2} />
+    {/* Body/shoulders */}
+    <Path d="M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2" stroke={color} strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );
 
@@ -1645,22 +1653,41 @@ const HeroScreen = ({ route, navigation }) => {
         
 
         // Apply saved photo container axis from MongoDB, if present
+        // Coordinates are scaled from reference canvas to actual container size
+        // If coordinate_reference exists, scale from that reference
+        // If not (old templates), use coordinates as-is (they were saved at similar device resolution)
         try {
           const axis = doc?.photo_container_axis || doc?.photoAxis || doc?.photo_position;
+          const coordRef = doc?.coordinate_reference;
+          const hasReference = coordRef && Number(coordRef?.width) > 0 && Number(coordRef?.height) > 0;
+
+          // Default reference dimensions (9:16 aspect ratio matching website editor)
+          const refW = hasReference ? Number(coordRef.width) : containerWidth;
+          const refH = hasReference ? Number(coordRef.height) : containerHeight;
+
+          // Scale factor from reference to actual container
+          // If no reference (old template), scale factor is 1 (no scaling)
+          const scaleX = containerWidth / refW;
+          const scaleY = containerHeight / refH;
+
           const rawX = Number(axis?.x);
           const rawY = Number(axis?.y);
           const currentSerial = doc?.serial_no;
-          
+
           if (Number.isFinite(rawX) && Number.isFinite(rawY)) {
+            // Scale coordinates from reference canvas to actual container
+            const scaledX = Math.round(rawX * scaleX);
+            const scaledY = Math.round(rawY * scaleY);
+
             const padding = 10;
             const maxX = Math.max(padding, containerWidth - photo1Size - padding);
             const maxY = Math.max(padding, containerHeight - photo1Size - padding);
-            const clampedX = Math.max(padding, Math.min(maxX, rawX));
-            const clampedY = Math.max(padding, Math.min(maxY, rawY));
-            
+            const clampedX = Math.max(padding, Math.min(maxX, scaledX));
+            const clampedY = Math.max(padding, Math.min(maxY, scaledY));
+
             // Apply axis only if switching to a different template (different serial number)
             const isDifferentTemplate = lastAppliedPhotoAxisSerial.current !== currentSerial;
-            
+
             if (isDifferentTemplate) {
               try {
                 if (pan1X && typeof pan1X.value !== 'undefined') pan1X.value = clampedX;
@@ -1668,7 +1695,15 @@ const HeroScreen = ({ route, navigation }) => {
                 lastAppliedPhotoAxisSerial.current = currentSerial;
                 // Reset the manual movement flag for this new template
                 hasUserMovedStaticPhotoRef.current = false;
-                console.log('📍 Applied photo axis from template schema:', { x: clampedX, y: clampedY, serial: currentSerial });
+                console.log('📍 Applied photo axis from template schema:', {
+                  raw: { x: rawX, y: rawY },
+                  scaled: { x: scaledX, y: scaledY },
+                  clamped: { x: clampedX, y: clampedY },
+                  scale: { x: scaleX.toFixed(2), y: scaleY.toFixed(2) },
+                  ref: { w: refW, h: refH },
+                  container: { w: containerWidth, h: containerHeight },
+                  serial: currentSerial
+                });
               } catch (e) {
                 console.error('❌ Error setting photo position:', e);
               }
@@ -1681,32 +1716,53 @@ const HeroScreen = ({ route, navigation }) => {
         }
 
         // Apply saved text container axis if present (position the default/first text)
+        // Coordinates are scaled from reference canvas to actual container size
+        // If coordinate_reference exists, scale from that reference
+        // If not (old templates), use coordinates as-is (they were saved at similar device resolution)
         try {
           const tAxis = doc?.text_container_axis || doc?.textAxis || doc?.text_position || doc?.text_axis;
+          const coordRef = doc?.coordinate_reference;
+          const hasReference = coordRef && Number(coordRef?.width) > 0 && Number(coordRef?.height) > 0;
+
+          // Default reference dimensions (9:16 aspect ratio matching website editor)
+          const refW = hasReference ? Number(coordRef.width) : containerWidth;
+          const refH = hasReference ? Number(coordRef.height) : containerHeight;
+
+          // Scale factor from reference to actual container
+          // If no reference (old template), scale factor is 1 (no scaling)
+          const scaleX = containerWidth / refW;
+          const scaleY = containerHeight / refH;
+
           const tRawX = Number(tAxis?.x);
           const tRawY = Number(tAxis?.y);
+          const tRawW = Number(tAxis?.width);
+          const tRawH = Number(tAxis?.height);
           const currentSerial = doc?.serial_no;
-          
+
           if (Number.isFinite(tRawX) && Number.isFinite(tRawY)) {
+            // Scale coordinates from reference canvas to actual container
+            const scaledX = Math.round(tRawX * scaleX);
+            const scaledY = Math.round(tRawY * scaleY);
+
             const padding = 10;
-            // Use existing first text element size if available, else estimated
+            // Use existing first text element size if available, else scale from reference
             const first = Array.isArray(textElements) && textElements.length > 0 ? textElements[0] : null;
-            const tWidth = Number(first?.width) || 160;
-            const tHeight = Number(first?.height) || 42;
+            const tWidth = Number.isFinite(tRawW) ? Math.round(tRawW * scaleX) : (Number(first?.width) || 160);
+            const tHeight = Number.isFinite(tRawH) ? Math.round(tRawH * scaleY) : (Number(first?.height) || 42);
             const tMaxX = Math.max(padding, containerWidth - tWidth - padding);
             const tMaxY = Math.max(padding, containerHeight - tHeight - padding);
-            const tX = Math.max(padding, Math.min(tMaxX, tRawX));
-            const tY = Math.max(padding, Math.min(tMaxY, tRawY));
+            const tX = Math.max(padding, Math.min(tMaxX, scaledX));
+            const tY = Math.max(padding, Math.min(tMaxY, scaledY));
 
             // Apply axis only if switching to a different template (different serial number)
             const isDifferentTemplate = lastAppliedTextAxisSerial.current !== currentSerial;
-            
+
             if (isDifferentTemplate) {
               setTextElements(prev => {
                 // Clear the moved and edited text IDs tracking for the new template
                 movedTextIdsRef.current.clear();
                 editedTextIdsRef.current.clear();
-                
+
                 if (!Array.isArray(prev) || prev.length === 0) {
                   // No text exists - create default at backend position
                   // Use Redux name if available, else userName state, else default
@@ -1718,20 +1774,33 @@ const HeroScreen = ({ route, navigation }) => {
                     y: tY,
                     width: tWidth,
                     height: tHeight,
-                    color: '#000000',
+                    color: COLORS.primary,
                     fontWeight: 'bold',
                     textAlign: 'center',
                     backgroundColor: 'rgba(0, 0, 0, 0.8)'
                   };
                   try { if (defaultTextAddedRef && defaultTextAddedRef.current !== undefined) defaultTextAddedRef.current = true; } catch {}
                   lastAppliedTextAxisSerial.current = currentSerial;
-                  console.log('📍 Created text at template axis:', { x: tX, y: tY, serial: currentSerial, text: displayName });
+                  console.log('📍 Created text at template axis:', {
+                    raw: { x: tRawX, y: tRawY },
+                    scaled: { x: scaledX, y: scaledY },
+                    final: { x: tX, y: tY, w: tWidth, h: tHeight },
+                    scale: { x: scaleX.toFixed(2), y: scaleY.toFixed(2) },
+                    serial: currentSerial,
+                    text: displayName
+                  });
                   return [newEl];
                 } else {
                   // Text exists - update FIRST text element to new template's axis
                   lastAppliedTextAxisSerial.current = currentSerial;
-                  console.log('📍 Applied text axis from template schema:', { x: tX, y: tY, serial: currentSerial });
-                  return prev.map((el, idx) => 
+                  console.log('📍 Applied text axis from template schema:', {
+                    raw: { x: tRawX, y: tRawY },
+                    scaled: { x: scaledX, y: scaledY },
+                    final: { x: tX, y: tY, w: tWidth, h: tHeight },
+                    scale: { x: scaleX.toFixed(2), y: scaleY.toFixed(2) },
+                    serial: currentSerial
+                  });
+                  return prev.map((el, idx) =>
                     idx === 0 ? { ...el, x: tX, y: tY, width: tWidth, height: tHeight } : el
                   );
                 }
@@ -2857,7 +2926,7 @@ React.useEffect(() => {
       y: safeY,
       width: estimatedTextWidth,
       height: estimatedTextHeight,
-      color: '#000000',
+      color: COLORS.primary,
       fontWeight: 'bold',
       textAlign: 'center',
       backgroundColor: 'rgba(0, 0, 0, 0.8)'
@@ -3280,7 +3349,7 @@ React.useEffect(() => {
             });
           }
 
-          // Text overlays
+          // Text overlays - send original screen coordinates, server will scale
           const texts = Array.isArray(textElements) ? textElements.map(t => ({
             text: String(t.text || ''),
             x: Math.round(t.x || 0),
@@ -3467,6 +3536,7 @@ React.useEffect(() => {
               photos.push({ uri, x: Math.round(el.x || 0), y: Math.round(el.y || 0), width: Math.round(el.size || 0), height: Math.round(el.size || 0) });
             });
           }
+          // Text overlays - send original screen coordinates, server will scale
           const texts = Array.isArray(textElements) ? textElements.map(t => ({
             text: String(t.text || ''),
             x: Math.round(t.x || 0),
@@ -4336,6 +4406,7 @@ React.useEffect(() => {
 
         {!localMode && isSaving && (
           <View style={styles.downloadSpinnerRow}>
+            <Text style={styles.downloadingText}>Downloading</Text>
             <ActivityIndicator size="small" color={COLORS.primary || '#ffffff'} />
           </View>
         )}
@@ -5218,8 +5289,15 @@ const styles = StyleSheet.create({
   downloadSpinnerRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    alignItems: 'center',
     paddingRight: 16,
     paddingBottom: 4,
+  },
+  downloadingText: {
+    color: COLORS.primary || '#5d1e99',
+    fontSize: 14,
+    fontWeight: '600',
+    marginRight: 8,
   },
   categoryTabsContainer: {
     paddingRight: 12,

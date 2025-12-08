@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import backgroundRemovalService from './BackgroundRemovalService';
 
 // Support both old and new token keys
 const TOKEN_KEYS = ['authToken', 'AUTH_TOKEN'];
@@ -15,11 +16,11 @@ const getToken = async () => {
 };
 
 /**
- * Get base URL for API calls
+ * Get base URL for API calls - uses unified config from BackgroundRemovalService
  */
 const getBaseUrl = () => {
-  // Use production server URL
-  return 'http://31.97.233.69:10000';
+  const config = backgroundRemovalService.getServerConfig();
+  return config?.baseUrl?.replace(/\/$/, '') || 'https://codebinary.in';
 };
 
 /**
@@ -34,9 +35,20 @@ const SubscriptionService = {
     try {
       console.log('🔍 [SUBSCRIPTION] Checking subscription status...');
 
+      // Get user info for debugging
+      const userJson = await AsyncStorage.getItem('user') || await AsyncStorage.getItem('AUTH_USER');
+      if (userJson) {
+        try {
+          const user = JSON.parse(userJson);
+          console.log('👤 [SUBSCRIPTION] Checking for user:', user?.name || user?.phone || 'unknown');
+        } catch (e) {}
+      }
+
       // First check local cache for quick validation
       const cachedActive = await AsyncStorage.getItem('subscriptionActive');
       const cachedExpiry = await AsyncStorage.getItem('subscriptionExpiry');
+
+      console.log('📦 [SUBSCRIPTION] Cache state:', { cachedActive, cachedExpiry });
 
       if (cachedActive === 'true' && cachedExpiry) {
         const expiryDate = new Date(cachedExpiry);
@@ -62,22 +74,27 @@ const SubscriptionService = {
           await AsyncStorage.removeItem('subscriptionActive');
           await AsyncStorage.removeItem('subscriptionExpiry');
         }
+      } else {
+        console.log('📭 [SUBSCRIPTION] No valid cache found, will check server');
       }
 
-      // Check with server with shorter timeout (5 seconds instead of default 15)
+      // Check with server with reasonable timeout (10 seconds)
       const token = await getToken();
       if (!token) {
         console.log('⚠️ [SUBSCRIPTION] No auth token found');
         return { active: false, status: 'none', currentPeriodEnd: null };
       }
 
+      console.log('🔑 [SUBSCRIPTION] Token found, checking with server...');
       const baseUrl = getBaseUrl();
+      console.log('🌐 [SUBSCRIPTION] Server URL:', baseUrl);
 
-      // Add timeout to prevent long delays
+      // Add timeout to prevent long delays (increased to 10 seconds)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
       try {
+        console.log('📡 [SUBSCRIPTION] Fetching from:', `${baseUrl}/api/auth/subscription-status`);
         const response = await fetch(`${baseUrl}/api/auth/subscription-status`, {
           method: 'GET',
           headers: {
@@ -89,15 +106,24 @@ const SubscriptionService = {
 
         clearTimeout(timeoutId);
 
+        console.log('📨 [SUBSCRIPTION] Response status:', response.status);
         if (!response.ok) {
-          console.error('❌ [SUBSCRIPTION] Server returned:', response.status);
+          console.error('❌ [SUBSCRIPTION] Server returned error:', response.status);
+          // On server error, check cache as fallback
+          const cachedActive = await AsyncStorage.getItem('subscriptionActive');
+          const cachedExpiry = await AsyncStorage.getItem('subscriptionExpiry');
+          if (cachedActive === 'true' && cachedExpiry && new Date(cachedExpiry) > new Date()) {
+            console.log('⚠️ [SUBSCRIPTION] Server error, using valid cache');
+            return { active: true, status: 'active', currentPeriodEnd: cachedExpiry, fromCache: true };
+          }
           return { active: false, status: 'none', currentPeriodEnd: null };
         }
 
         const data = await response.json();
+        console.log('📦 [SUBSCRIPTION] Server response:', JSON.stringify(data));
 
         if (data.success && data.data) {
-          console.log('✅ [SUBSCRIPTION] Status from server:', data.data.status);
+          console.log('✅ [SUBSCRIPTION] Status from server:', data.data.status, '| Active:', data.data.active);
 
           // Update local cache
           if (data.data.active && data.data.currentPeriodEnd) {
@@ -105,6 +131,7 @@ const SubscriptionService = {
             await AsyncStorage.setItem('subscriptionExpiry', data.data.currentPeriodEnd);
             console.log('💾 [SUBSCRIPTION] Cached until:', data.data.currentPeriodEnd);
           } else {
+            console.log('⚠️ [SUBSCRIPTION] Server says NOT active, clearing cache');
             await AsyncStorage.removeItem('subscriptionActive');
             await AsyncStorage.removeItem('subscriptionExpiry');
           }
@@ -117,11 +144,19 @@ const SubscriptionService = {
           };
         }
 
+        console.log('⚠️ [SUBSCRIPTION] Invalid server response format');
         return { active: false, status: 'none', currentPeriodEnd: null };
       } catch (fetchError) {
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
-          console.error('❌ [SUBSCRIPTION] Request timeout after 5 seconds');
+          console.error('❌ [SUBSCRIPTION] Request timeout after 10 seconds');
+          // On timeout, check cache as fallback
+          const cachedActive = await AsyncStorage.getItem('subscriptionActive');
+          const cachedExpiry = await AsyncStorage.getItem('subscriptionExpiry');
+          if (cachedActive === 'true' && cachedExpiry && new Date(cachedExpiry) > new Date()) {
+            console.log('⚠️ [SUBSCRIPTION] Timeout, using valid cache');
+            return { active: true, status: 'active', currentPeriodEnd: cachedExpiry, fromCache: true };
+          }
           throw new Error('Subscription check timeout');
         }
         throw fetchError;
