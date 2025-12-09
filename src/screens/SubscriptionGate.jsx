@@ -6,19 +6,35 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Modal,
-  Image,
+  ScrollView,
+  useWindowDimensions,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PaymentService from '../services/PaymentService';
-import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
+import { COLORS, TYPOGRAPHY, SPACING, moderateScale } from '../theme';
 import CustomAlert from '../Components/CustomAlert';
 
 const SubscriptionGate = () => {
   const navigation = useNavigation();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', buttons: [] });
+
+  // Responsive calculations
+  const isSmallDevice = width < 360;
+  const isMediumDevice = width >= 360 && width < 400;
+  const isLargeDevice = width >= 400;
+  const isShortScreen = height < 700;
+
+  // Dynamic sizes based on screen dimensions
+  const scale = (size) => moderateScale(size, 0.3);
+  const verticalScale = (size) => (height / 812) * size; // Based on standard iPhone X height
 
   const handleSubscribe = async () => {
     try {
@@ -124,71 +140,183 @@ const SubscriptionGate = () => {
     }
   };
 
+  // Dynamic styles based on screen size
+  const dynamicStyles = {
+    container: {
+      paddingTop: insets.top || (Platform.OS === 'android' ? StatusBar.currentHeight : 0),
+      paddingBottom: insets.bottom || scale(16),
+      paddingHorizontal: scale(isSmallDevice ? 12 : 16),
+    },
+    header: {
+      marginTop: verticalScale(isShortScreen ? 16 : 32),
+      marginBottom: verticalScale(isShortScreen ? 16 : 24),
+    },
+    appName: {
+      fontSize: scale(isSmallDevice ? 28 : 36),
+    },
+    tagline: {
+      fontSize: scale(isSmallDevice ? 13 : 15),
+    },
+    card: {
+      padding: scale(isSmallDevice ? 16 : 24),
+      borderRadius: scale(20),
+      maxWidth: 500,
+      alignSelf: 'center',
+      width: '100%',
+    },
+    iconContainer: {
+      width: scale(isSmallDevice ? 60 : 80),
+      height: scale(isSmallDevice ? 60 : 80),
+      borderRadius: scale(isSmallDevice ? 30 : 40),
+      marginBottom: verticalScale(isShortScreen ? 12 : 20),
+    },
+    icon: {
+      fontSize: scale(isSmallDevice ? 28 : 40),
+    },
+    title: {
+      fontSize: scale(isSmallDevice ? 20 : 24),
+      marginBottom: scale(4),
+    },
+    subtitle: {
+      fontSize: scale(isSmallDevice ? 13 : 15),
+      marginBottom: verticalScale(isShortScreen ? 16 : 24),
+    },
+    featureIcon: {
+      fontSize: scale(isSmallDevice ? 16 : 20),
+      marginRight: scale(8),
+    },
+    featureText: {
+      fontSize: scale(isSmallDevice ? 13 : 15),
+    },
+    featureRow: {
+      marginBottom: verticalScale(isShortScreen ? 8 : 12),
+    },
+    priceContainer: {
+      paddingVertical: verticalScale(isShortScreen ? 10 : 16),
+      marginBottom: verticalScale(isShortScreen ? 12 : 16),
+    },
+    priceLabel: {
+      fontSize: scale(isSmallDevice ? 11 : 12),
+    },
+    currency: {
+      fontSize: scale(isSmallDevice ? 18 : 24),
+    },
+    price: {
+      fontSize: scale(isSmallDevice ? 36 : 48),
+    },
+    duration: {
+      fontSize: scale(isSmallDevice ? 14 : 16),
+    },
+    subscribeButton: {
+      paddingVertical: scale(isSmallDevice ? 12 : 16),
+      paddingHorizontal: scale(16),
+      borderRadius: scale(12),
+      marginBottom: scale(12),
+    },
+    subscribeButtonText: {
+      fontSize: scale(isSmallDevice ? 15 : 18),
+    },
+    disclaimer: {
+      fontSize: scale(isSmallDevice ? 11 : 12),
+    },
+    paymentProcessingCard: {
+      minWidth: Math.min(scale(260), width * 0.85),
+      maxWidth: width * 0.9,
+      padding: scale(24),
+      borderRadius: scale(20),
+    },
+  };
+
+  const handleSkip = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'HeroScreen' }],
+    });
+  };
+
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.appName}>Picstar</Text>
-        <Text style={styles.tagline}>Create Beautiful Memories</Text>
-      </View>
+    <View style={[styles.container, dynamicStyles.container]}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-      {/* Subscription Card */}
-      <View style={styles.card}>
-        <View style={styles.iconContainer}>
-          <Text style={styles.icon}>⭐</Text>
+      {/* Skip Button - Top Right */}
+      <TouchableOpacity
+        style={[styles.skipButton, { top: insets.top + scale(8), right: scale(16) }]}
+        onPress={handleSkip}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.skipButtonText}>Skip</Text>
+      </TouchableOpacity>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
+        <View style={[styles.header, dynamicStyles.header]}>
+          <Text style={[styles.appName, dynamicStyles.appName]}>Picstar</Text>
+          <Text style={[styles.tagline, dynamicStyles.tagline]}>Create Beautiful Memories</Text>
         </View>
 
-        <Text style={styles.title}>Unlock Full Access</Text>
-        <Text style={styles.subtitle}>Get unlimited access to all features</Text>
+        {/* Subscription Card */}
+        <View style={[styles.card, dynamicStyles.card]}>
+          <View style={[styles.iconContainer, dynamicStyles.iconContainer]}>
+            <Text style={[styles.icon, dynamicStyles.icon]}>⭐</Text>
+          </View>
 
-        {/* Features */}
-        <View style={styles.featuresContainer}>
-          <View style={styles.featureRow}>
-            <Text style={styles.featureIcon}>✓</Text>
-            <Text style={styles.featureText}>Remove backgrounds from unlimited photos</Text>
+          <Text style={[styles.title, dynamicStyles.title]}>Unlock Full Access</Text>
+          <Text style={[styles.subtitle, dynamicStyles.subtitle]}>Get unlimited access to all features</Text>
+
+          {/* Features */}
+          <View style={styles.featuresContainer}>
+            <View style={[styles.featureRow, dynamicStyles.featureRow]}>
+              <Text style={[styles.featureIcon, dynamicStyles.featureIcon]}>✓</Text>
+              <Text style={[styles.featureText, dynamicStyles.featureText]}>Remove backgrounds from unlimited photos</Text>
+            </View>
+            <View style={[styles.featureRow, dynamicStyles.featureRow]}>
+              <Text style={[styles.featureIcon, dynamicStyles.featureIcon]}>✓</Text>
+              <Text style={[styles.featureText, dynamicStyles.featureText]}>Access all premium templates</Text>
+            </View>
+            <View style={[styles.featureRow, dynamicStyles.featureRow]}>
+              <Text style={[styles.featureIcon, dynamicStyles.featureIcon]}>✓</Text>
+              <Text style={[styles.featureText, dynamicStyles.featureText]}>Create stunning collages & videos</Text>
+            </View>
+            <View style={[styles.featureRow, dynamicStyles.featureRow]}>
+              <Text style={[styles.featureIcon, dynamicStyles.featureIcon]}>✓</Text>
+              <Text style={[styles.featureText, dynamicStyles.featureText]}>No ads, no watermarks</Text>
+            </View>
           </View>
-          <View style={styles.featureRow}>
-            <Text style={styles.featureIcon}>✓</Text>
-            <Text style={styles.featureText}>Access all premium templates</Text>
+
+          {/* Price */}
+          <View style={[styles.priceContainer, dynamicStyles.priceContainer]}>
+            <Text style={[styles.priceLabel, dynamicStyles.priceLabel]}>Special Offer</Text>
+            <View style={styles.priceRow}>
+              <Text style={[styles.currency, dynamicStyles.currency]}>₹</Text>
+              <Text style={[styles.price, dynamicStyles.price]}>1</Text>
+              <Text style={[styles.duration, dynamicStyles.duration]}>/ 30 days</Text>
+            </View>
           </View>
-          <View style={styles.featureRow}>
-            <Text style={styles.featureIcon}>✓</Text>
-            <Text style={styles.featureText}>Create stunning collages & videos</Text>
-          </View>
-          <View style={styles.featureRow}>
-            <Text style={styles.featureIcon}>✓</Text>
-            <Text style={styles.featureText}>No ads, no watermarks</Text>
-          </View>
+
+          {/* Subscribe Button */}
+          <TouchableOpacity
+            style={[styles.subscribeButton, dynamicStyles.subscribeButton, paymentLoading && styles.buttonDisabled]}
+            onPress={handleSubscribe}
+            disabled={paymentLoading}
+            activeOpacity={0.8}
+          >
+            {paymentLoading ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <Text style={[styles.subscribeButtonText, dynamicStyles.subscribeButtonText]}>Subscribe Now</Text>
+            )}
+          </TouchableOpacity>
+
+          <Text style={[styles.disclaimer, dynamicStyles.disclaimer]}>
+            One-time payment • Automatic access for 30 days
+          </Text>
         </View>
-
-        {/* Price */}
-        <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>Special Offer</Text>
-          <View style={styles.priceRow}>
-            <Text style={styles.currency}>₹</Text>
-            <Text style={styles.price}>1</Text>
-            <Text style={styles.duration}>/ 30 days</Text>
-          </View>
-        </View>
-
-        {/* Subscribe Button */}
-        <TouchableOpacity
-          style={[styles.subscribeButton, paymentLoading && styles.buttonDisabled]}
-          onPress={handleSubscribe}
-          disabled={paymentLoading}
-          activeOpacity={0.8}
-        >
-          {paymentLoading ? (
-            <ActivityIndicator size="small" color={COLORS.white} />
-          ) : (
-            <Text style={styles.subscribeButtonText}>Subscribe Now</Text>
-          )}
-        </TouchableOpacity>
-
-        <Text style={styles.disclaimer}>
-          One-time payment • Automatic access for 30 days
-        </Text>
-      </View>
+      </ScrollView>
 
       {/* Custom Alert */}
       <CustomAlert
@@ -204,9 +332,10 @@ const SubscriptionGate = () => {
         visible={paymentProcessing}
         transparent={true}
         animationType="fade"
+        statusBarTranslucent={true}
       >
         <View style={styles.paymentProcessingOverlay}>
-          <View style={styles.paymentProcessingCard}>
+          <View style={[styles.paymentProcessingCard, dynamicStyles.paymentProcessingCard]}>
             <ActivityIndicator size="large" color="#10B981" />
             <Text style={styles.paymentProcessingTitle}>Activating Subscription</Text>
             <Text style={styles.paymentProcessingText}>
@@ -223,28 +352,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    padding: SPACING.lg,
+  },
+  skipButton: {
+    position: 'absolute',
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  skipButtonText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: SPACING.xl,
   },
   header: {
     alignItems: 'center',
-    marginTop: SPACING.xl * 2,
-    marginBottom: SPACING.xl,
   },
   appName: {
-    ...TYPOGRAPHY.h1,
-    fontSize: 36,
     fontWeight: '700',
     color: COLORS.primary,
     marginBottom: SPACING.xs,
   },
   tagline: {
-    ...TYPOGRAPHY.bodyMedium,
     color: COLORS.gray,
   },
   card: {
     backgroundColor: COLORS.white,
-    borderRadius: 24,
-    padding: SPACING.xl,
     elevation: 8,
     shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 4 },
@@ -253,59 +391,45 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     alignSelf: 'center',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
     backgroundColor: '#FEF3C7',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.lg,
   },
   icon: {
-    fontSize: 40,
+    // Font size set dynamically
   },
   title: {
-    ...TYPOGRAPHY.h2,
     fontWeight: '700',
     color: COLORS.text,
     textAlign: 'center',
-    marginBottom: SPACING.xs,
   },
   subtitle: {
-    ...TYPOGRAPHY.bodyMedium,
     color: COLORS.gray,
     textAlign: 'center',
-    marginBottom: SPACING.xl,
   },
   featuresContainer: {
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.md,
   },
   featureRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
+    alignItems: 'flex-start',
   },
   featureIcon: {
-    fontSize: 20,
     color: '#10B981',
-    marginRight: SPACING.sm,
     fontWeight: '700',
   },
   featureText: {
-    ...TYPOGRAPHY.bodyMedium,
     color: COLORS.text,
     flex: 1,
+    flexWrap: 'wrap',
   },
   priceContainer: {
     alignItems: 'center',
-    marginBottom: SPACING.lg,
-    paddingVertical: SPACING.md,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#E5E7EB',
   },
   priceLabel: {
-    ...TYPOGRAPHY.bodySmall,
     color: '#10B981',
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -317,46 +441,36 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   currency: {
-    ...TYPOGRAPHY.h2,
-    fontSize: 24,
     color: COLORS.text,
     fontWeight: '700',
   },
   price: {
-    ...TYPOGRAPHY.h1,
-    fontSize: 48,
     fontWeight: '700',
     color: COLORS.text,
   },
   duration: {
-    ...TYPOGRAPHY.bodyLarge,
     color: COLORS.gray,
     marginLeft: SPACING.xs,
   },
   subscribeButton: {
     backgroundColor: '#10B981',
-    borderRadius: 12,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
     alignItems: 'center',
+    justifyContent: 'center',
     elevation: 4,
     shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    marginBottom: SPACING.md,
+    minHeight: 48,
   },
   subscribeButtonText: {
-    ...TYPOGRAPHY.bodyLarge,
     fontWeight: '700',
     color: COLORS.white,
-    fontSize: 18,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   disclaimer: {
-    ...TYPOGRAPHY.bodySmall,
     color: COLORS.gray,
     textAlign: 'center',
   },
@@ -365,13 +479,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
   },
   paymentProcessingCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: SPACING.xl,
     alignItems: 'center',
-    minWidth: 260,
     elevation: 10,
     shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 4 },
@@ -379,17 +491,18 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   paymentProcessingTitle: {
-    ...TYPOGRAPHY.h3,
     fontWeight: '700',
     color: '#10B981',
     marginTop: SPACING.md,
     marginBottom: SPACING.sm,
+    fontSize: 18,
+    textAlign: 'center',
   },
   paymentProcessingText: {
-    ...TYPOGRAPHY.bodyMedium,
     color: COLORS.gray,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
+    fontSize: 14,
   },
 });
 
