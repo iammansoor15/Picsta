@@ -1,6 +1,6 @@
 const AppConfig = {
-  PRODUCTION_SERVER_URL: 'https://codebinary.in',
-  PRODUCTION_AUTH_SERVER_URL:  'https://codebinary.in',
+  PRODUCTION_SERVER_URL: 'http://192.168.1.76:10000',
+  PRODUCTION_AUTH_SERVER_URL:  'http://192.168.1.76:10000',
   
   APP_NAME: 'Winter',
   VERSION: '1.0.6',
@@ -15,8 +15,8 @@ const AppConfig = {
     ENABLE_LOGGING: true,
     SHOW_SERVER_CONFIG: true, 
 
-    DEV_SERVER_URL: 'https://codebinary.in',
-    DEV_AUTH_SERVER_URL: 'https://codebinary.in',
+    DEV_SERVER_URL: 'http://192.168.1.76:10000',
+    DEV_AUTH_SERVER_URL: 'http://192.168.1.76:10000',
 
     USE_PRODUCTION_FALLBACK: true, 
   }

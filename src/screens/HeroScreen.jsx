@@ -2893,6 +2893,7 @@ React.useEffect(() => {
       y: safeY,
       width: estimatedTextWidth,
       height: estimatedTextHeight,
+      fontSize: 18, // Default font size
       color: textColor,
       fontWeight: 'bold',
       textAlign: 'center',
@@ -2935,6 +2936,7 @@ React.useEffect(() => {
       y: safeY,
       width: estimatedTextWidth,
       height: estimatedTextHeight,
+      fontSize: 18, // Default font size
       color: COLORS.primary,
       fontWeight: 'bold',
       textAlign: 'center',
@@ -2979,10 +2981,12 @@ React.useEffect(() => {
     );
   };
 
-  const updateTextSize = (textId, width, height) => {
-    setTextElements(prev => 
-      prev.map(element => 
-        element.id === textId ? { ...element, width, height } : element
+  const updateTextSize = (textId, width, height, fontSize) => {
+    setTextElements(prev =>
+      prev.map(element =>
+        element.id === textId
+          ? { ...element, width, height, ...(fontSize !== undefined && { fontSize }) }
+          : element
       )
     );
   };
@@ -3365,7 +3369,7 @@ React.useEffect(() => {
             y: Math.round(t.y || 0),
             width: Math.round(t.width || 120),
             height: Math.round(t.height || 40),
-            fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.6))),
+            fontSize: t.fontSize || 18,
             color: t.color || '#FFFFFF',
             fontWeight: t.fontWeight || 'normal',
             fontFamily: t.fontFamily || null,
@@ -3552,7 +3556,7 @@ React.useEffect(() => {
             y: Math.round(t.y || 0),
             width: Math.round(t.width || 120),
             height: Math.round(t.height || 40),
-            fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.6))),
+            fontSize: t.fontSize || 18,
             color: t.color || '#FFFFFF',
             fontWeight: t.fontWeight || 'normal',
             fontFamily: t.fontFamily || null,

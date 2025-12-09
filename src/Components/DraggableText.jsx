@@ -96,10 +96,13 @@ const DraggableText = ({
     }
   }, [textElement.text, isEditing]);
 
-  const [containerDimensions, setContainerDimensions] = useState({ 
-    width: textElement.width || 120, 
-    height: textElement.height || 50 
+  const [containerDimensions, setContainerDimensions] = useState({
+    width: textElement.width || 120,
+    height: textElement.height || 50
   });
+
+  // Font size state - separate from container dimensions
+  const [fontSize, setFontSize] = useState(textElement.fontSize || 18);
   
   // Track if dimensions have been manually resized
   const [hasBeenResized, setHasBeenResized] = useState(false);
@@ -109,6 +112,9 @@ const DraggableText = ({
     width: textElement.width || 120,
     height: textElement.height || 50
   });
+
+  // Persistent font size
+  const persistentFontSize = useRef(textElement.fontSize || 18);
   const containerRef = useRef(null);
 
   const textInputRef = useRef(null);
@@ -210,8 +216,11 @@ const DraggableText = ({
 
   // Store initial dimensions for resizing using ref to avoid async state issues
   const initialResizeDimensions = useRef({ width: 0, height: 0 });
+  // Store initial font size for resizing
+  const initialFontSize = useRef(18);
 
   // Resize PanResponder for resizing the text container
+  // Horizontal drag = change width, Vertical drag = change font size
   const resizeResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => {
@@ -228,66 +237,79 @@ const DraggableText = ({
         // Use persistent dimensions if available, fallback to container state
         const currentWidth = hasBeenResized ? persistentDimensions.current.width : containerDimensions.width;
         const currentHeight = hasBeenResized ? persistentDimensions.current.height : containerDimensions.height;
-        
+
         // Store current dimensions as initial for this resize gesture
         initialResizeDimensions.current = {
           width: currentWidth,
           height: currentHeight
         };
-        
+
+        // Store current font size
+        initialFontSize.current = persistentFontSize.current;
+
         console.log('📏 Started resizing from dimensions:', {
           initialForResize: initialResizeDimensions.current,
+          initialFontSize: initialFontSize.current,
           containerState: containerDimensions,
           persistentState: persistentDimensions.current,
           hasBeenResized: hasBeenResized
         });
       },
       onPanResponderMove: (evt, gestureState) => {
-        // Calculate new dimensions based on gesture from initial size
-        const minSize = 60; // Minimum container size
-        const maxWidth = containerWidth * 0.8; // Max 80% of container width
-        const maxHeight = containerHeight * 0.6; // Max 60% of container height
-        
-        // Use initial dimensions from when resize started
-        const newWidth = Math.max(minSize, Math.min(maxWidth, initialResizeDimensions.current.width + gestureState.dx));
-        const newHeight = Math.max(minSize, Math.min(maxHeight, initialResizeDimensions.current.height + gestureState.dy));
-        
-        // Update persistent dimensions during resize
+        // Horizontal drag = change width
+        const minWidth = 60;
+        const maxWidth = containerWidth * 0.95; // Max 95% of container width
+        const newWidth = Math.max(minWidth, Math.min(maxWidth, initialResizeDimensions.current.width + gestureState.dx));
+
+        // Vertical drag = change font size (drag down = bigger, drag up = smaller)
+        const minFontSize = 10;
+        const maxFontSize = 72;
+        const fontSizeScale = 0.3; // How much font size changes per pixel of drag
+        const newFontSize = Math.max(minFontSize, Math.min(maxFontSize, initialFontSize.current + (gestureState.dy * fontSizeScale)));
+
+        // Calculate height based on font size and text content
+        // Estimate: height = fontSize * 1.5 (line height) * number of lines + padding
+        const estimatedLineHeight = newFontSize * 1.4;
+        const textLength = (currentText || '').length;
+        const charsPerLine = Math.max(1, Math.floor(newWidth / (newFontSize * 0.6))); // Approximate chars per line
+        const estimatedLines = Math.max(1, Math.ceil(textLength / charsPerLine));
+        const newHeight = Math.max(40, estimatedLineHeight * estimatedLines + 10);
+
+        // Update persistent values during resize
         persistentDimensions.current = {
           width: newWidth,
           height: newHeight
         };
-        
-        console.log('📏 Resizing:', { 
-          dx: gestureState.dx.toFixed(1), 
+        persistentFontSize.current = newFontSize;
+
+        console.log('📏 Resizing:', {
+          dx: gestureState.dx.toFixed(1),
           dy: gestureState.dy.toFixed(1),
-          newWidth: newWidth.toFixed(1), 
-          newHeight: newHeight.toFixed(1),
-          persistentUpdated: persistentDimensions.current
+          newWidth: newWidth.toFixed(1),
+          newFontSize: newFontSize.toFixed(1),
+          newHeight: newHeight.toFixed(1)
         });
-        
+
         setContainerDimensions({ width: newWidth, height: newHeight });
+        setFontSize(newFontSize);
       },
       onPanResponderRelease: (evt, gestureState) => {
         setIsResizing(false);
         setHasBeenResized(true); // Mark as manually resized
-        
-        // Update parent component with final persistent dimensions
+
+        // Update parent component with final values
         const finalWidth = persistentDimensions.current.width;
         const finalHeight = persistentDimensions.current.height;
-        
+        const finalFontSize = persistentFontSize.current;
+
         if (onSizeChange) {
-          onSizeChange(textElement.id, finalWidth, finalHeight);
+          onSizeChange(textElement.id, finalWidth, finalHeight, finalFontSize);
         }
-        
+
         console.log('✅ Finished resizing:', {
           finalWidth: finalWidth.toFixed(1),
           finalHeight: finalHeight.toFixed(1),
-          containerState: {
-            width: containerDimensions.width.toFixed(1),
-            height: containerDimensions.height.toFixed(1)
-          },
-          persistentState: persistentDimensions.current
+          finalFontSize: finalFontSize.toFixed(1)
         });
       },
       onPanResponderTerminationRequest: () => false,
@@ -434,6 +456,15 @@ const DraggableText = ({
       }
     }
   }, [textElement.width, textElement.height, hasBeenResized]);
+
+  // Sync fontSize from textElement prop (from parent)
+  useEffect(() => {
+    if (textElement.fontSize && textElement.fontSize !== fontSize) {
+      setFontSize(textElement.fontSize);
+      persistentFontSize.current = textElement.fontSize;
+      console.log('🔄 Updated fontSize from parent:', textElement.fontSize);
+    }
+  }, [textElement.fontSize]);
   
   
   // Update container dimensions when layout changes (only if not manually resized)
@@ -519,7 +550,7 @@ const DraggableText = ({
             style={[
               styles.textInput,
               {
-                fontSize: Math.max(12, Math.min(36, containerDimensions.width * 0.15)), // Scale with container width
+                fontSize: fontSize,
                 color: textElement.color || COLORS.primary,
                 fontWeight: textElement.fontWeight || 'normal',
                 textAlign: textElement.textAlign || 'center',
@@ -566,7 +597,7 @@ const DraggableText = ({
               style={[
                 styles.textDisplay,
                 {
-                  fontSize: Math.max(12, Math.min(36, containerDimensions.width * 0.15)), // Scale with container width
+                  fontSize: fontSize,
                   color: textElement.color || COLORS.primary,
                   fontWeight: textElement.fontWeight || 'normal',
                   textAlign: textElement.textAlign || 'center',
