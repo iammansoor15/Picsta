@@ -10,6 +10,7 @@ import React, { useRef, useState, useReducer, useLayoutEffect } from 'react';
 import {
   View,
   Image,
+  ImageBackground,
   StyleSheet,
   Dimensions,
   PanResponder,
@@ -623,17 +624,25 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
           {/* No buffering indicator for smooth scroll experience */}
         </>
       ) : (
-        <Image
-          source={{ uri: imageUrl }}
-          style={{ width: '100%', height: '100%' }}
-          resizeMode="cover"
-          onLoad={() => {
-            console.log(`✅ Image loaded at index ${index}, serial: ${item?.serial_no}`);
-          }}
-          onError={(e) => {
-            console.error(`❌ Image load error at index ${index}:`, e?.nativeEvent?.error);
-          }}
-        />
+        <View style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+          <Image
+            source={{ uri: imageUrl }}
+            style={{
+              width: containerWidth,
+              height: Math.max(containerHeight, containerWidth * (16 / 9)),
+              position: 'absolute',
+              top: 0,
+              left: 0
+            }}
+            resizeMode="cover"
+            onLoad={() => {
+              console.log(`✅ Image loaded at index ${index}, serial: ${item?.serial_no}`);
+            }}
+            onError={(e) => {
+              console.error(`❌ Image load error at index ${index}:`, e?.nativeEvent?.error);
+            }}
+          />
+        </View>
       )}
     </View>
   );
@@ -3356,7 +3365,7 @@ React.useEffect(() => {
             y: Math.round(t.y || 0),
             width: Math.round(t.width || 120),
             height: Math.round(t.height || 40),
-            fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.8))),
+            fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.6))),
             color: t.color || '#FFFFFF',
             fontWeight: t.fontWeight || 'normal',
             fontFamily: t.fontFamily || null,
@@ -3543,7 +3552,7 @@ React.useEffect(() => {
             y: Math.round(t.y || 0),
             width: Math.round(t.width || 120),
             height: Math.round(t.height || 40),
-            fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.8))),
+            fontSize: Math.max(16, Math.min(64, Math.floor((t.height || 40) * 0.6))),
             color: t.color || '#FFFFFF',
             fontWeight: t.fontWeight || 'normal',
             fontFamily: t.fontFamily || null,
