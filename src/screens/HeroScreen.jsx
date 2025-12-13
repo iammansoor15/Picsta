@@ -2698,8 +2698,8 @@ React.useEffect(() => {
   // Banner toggle state
   const [bannerEnabled, setBannerEnabled] = useState(false);
   // Draggability toggle state (for text and photo containers)
-  const [isDraggable, setIsDraggable] = useState(true);
-  const isDraggableRef = useRef(true); // Ref for PanResponder access
+  const [isDraggable, setIsDraggable] = useState(false);
+  const isDraggableRef = useRef(false); // Ref for PanResponder access
 
   // Keep ref in sync with state
   React.useEffect(() => {
@@ -4351,12 +4351,55 @@ React.useEffect(() => {
     <>
       <View style={{ flex: 1 }}>
 
-        {/* App Name */}
+        {/* First row: App Name (left) and Plus + Profile photo (right) */}
         {!localMode && (
-          <Text style={styles.appNameHeader}>Winter</Text>
+          <View style={styles.appNameRow}>
+            <Text style={styles.appNameHeader}>Winter</Text>
+            <View style={styles.headerRightGroup}>
+              {/* Plus icon for templates */}
+              <TouchableOpacity
+                style={styles.headerTemplateButton}
+                onPress={handleTemplateButtonPress}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.headerTemplatePlus}>➕</Text>
+              </TouchableOpacity>
+              {/* Profile photo */}
+              <TouchableOpacity
+                onPress={async () => {
+                  try {
+                    const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
+                    if (!token) {
+                      navigation.navigate('RegisterWithOTP');
+                      return;
+                    }
+                  } catch (e) {
+                    navigation.navigate('RegisterWithOTP');
+                    return;
+                  }
+                  navigation.navigate('ProfileScreen');
+                }}
+                style={styles.profilePhotoContainerUnderHeader}
+                activeOpacity={0.8}
+              >
+                <Image
+                  source={(() => {
+                    try {
+                      if (profilePictureUri && !isDefaultPicture) {
+                        return { uri: profilePictureUri };
+                      }
+                    } catch {}
+                    return getDefaultProfileImage();
+                  })()}
+                  style={styles.profilePhotoUnderHeader}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
 
-        {/* Top row: Category tabs (left) and Profile photo (right) */}
+        {/* Second row: Category tabs */}
         {!localMode && (
         <View style={styles.topBarRow}>
           {/* Category tabs (wrap to multiple lines) */}
@@ -4399,54 +4442,6 @@ React.useEffect(() => {
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
-
-          {/* Right side: Template button + Profile photo */}
-          <View style={styles.topBarRightRow}>
-            {/* Simple plus icon for templates */}
-            <TouchableOpacity
-              style={styles.headerTemplateButton}
-              onPress={handleTemplateButtonPress}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.headerTemplatePlus}>➕</Text>
-            </TouchableOpacity>
-
-            {/* Profile photo */}
-            <TouchableOpacity
-              onPress={async () => {
-                try {
-                  // Check for auth token (OTP registration uses 'authToken')
-                  const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
-                  if (!token) {
-                    // No token, navigate to registration
-                    navigation.navigate('RegisterWithOTP');
-                    return;
-                  }
-                } catch (e) {
-                  // Error getting token, navigate to registration
-                  navigation.navigate('RegisterWithOTP');
-                  return;
-                }
-                // User is authenticated, go to profile
-                navigation.navigate('ProfileScreen');
-              }}
-              style={styles.profilePhotoContainerUnderHeader}
-              activeOpacity={0.8}
-            >
-              <Image
-                source={(() => {
-                  try {
-                    if (profilePictureUri && !isDefaultPicture) {
-                      return { uri: profilePictureUri };
-                    }
-                  } catch {}
-                  return getDefaultProfileImage();
-                })()}
-                style={styles.profilePhotoUnderHeader}
-                resizeMode="cover"
-              />
-            </TouchableOpacity>
           </View>
         </View>
         )}
@@ -4764,76 +4759,7 @@ onHandlerStateChange={({ nativeEvent }) => {
                 </View>
               )}
 
-              {/* Top-right action icons: Share and Download (hidden during capture) */}
-              {!isCapturing && (
-              <View style={styles.topRightActions} pointerEvents="box-none">
-                <TouchableOpacity 
-                  style={styles.actionIconButton}
-                  onPress={shareTemplate}
-                  disabled={isSharing}
-                  activeOpacity={0.85}
-                  accessibilityLabel="Share template"
-                >
-                  <Feather name="share-2" size={20} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.actionIconButton}
-                  onPress={saveTemplate}
-                  disabled={isSaving}
-                  activeOpacity={0.85}
-                  accessibilityLabel="Download template"
-                >
-                  <AntDesign name="download" size={20} color="#fff" />
-                </TouchableOpacity>
-
-                {/* Banner on/off or navigate to "Your Banners" */}
-                <TouchableOpacity
-                  style={styles.actionIconButton}
-                  onPress={async () => {
-                    try {
-                      if (bannerUri) {
-                        // We already have a banner selected → just toggle visibility
-                        setIsBannerFocused(false);
-                        setBannerEnabled(prev => !prev);
-                      } else {
-                        // No banner selected → go to Your Banners screen
-                        // Pass localMode so banner result comes back to correct HeroScreen type
-                        console.log('🚀 HeroScreen: Navigating to UserBanners with localMode:', localMode);
-                        cropResultManager.setSourceScreen(localMode ? 'localMode' : 'normal');
-                        navigation.navigate('UserBanners', { sourceScreen: localMode ? 'localMode' : 'normal' });
-                      }
-                    } catch (e) {}
-                  }}
-                  activeOpacity={0.85}
-                  accessibilityLabel={
-                    bannerUri
-                      ? (bannerEnabled ? "Hide banner" : "Show banner")
-                      : "Choose banner"
-                  }
-                >
-                  <Feather name="tag" size={20} color="#fff" />
-                </TouchableOpacity>
-                {/* Draggability toggle icon */}
-                <TouchableOpacity
-                  style={[styles.actionIconButton, !isDraggable && styles.actionIconButtonDisabled]}
-                  onPress={() => setIsDraggable(prev => !prev)}
-                  activeOpacity={0.85}
-                  accessibilityLabel={isDraggable ? "Lock elements" : "Unlock elements"}
-                >
-                  <Feather name={isDraggable ? "unlock" : "lock"} size={20} color="#fff" />
-                </TouchableOpacity>
-                {/* Menu toggle icon */}
-                <TouchableOpacity
-                  style={styles.actionIconButton}
-                  onPress={() => setMenuVisible(v => !v)}
-                  activeOpacity={0.85}
-                  accessibilityLabel="Toggle menu"
-                >
-                  <Text style={styles.actionIconText}>☰</Text>
-                </TouchableOpacity>
-              </View>
-              )}
-              
+                            
               {/* Banner choice dialog */}
               {showBannerDialog && (
                 <Modal
@@ -5143,6 +5069,83 @@ onHandlerStateChange={({ nativeEvent }) => {
         </ViewShot>
           </FlingGestureHandler>
         </FlingGestureHandler>
+
+        {/* Left side action icons (outside template) */}
+        {!isCapturing && (
+        <View style={styles.leftActionIcons} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.actionIconButton}
+            onPress={shareTemplate}
+            disabled={isSharing}
+            activeOpacity={0.85}
+            accessibilityLabel="Share template"
+          >
+            <Feather name="share-2" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionIconButton}
+            onPress={saveTemplate}
+            disabled={isSaving}
+            activeOpacity={0.85}
+            accessibilityLabel="Download template"
+          >
+            <AntDesign name="download" size={20} color="#fff" />
+          </TouchableOpacity>
+
+          {/* Banner on/off or navigate to "Your Banners" */}
+          <TouchableOpacity
+            style={styles.actionIconButton}
+            onPress={async () => {
+              try {
+                if (bannerUri) {
+                  setIsBannerFocused(false);
+                  setBannerEnabled(prev => !prev);
+                } else {
+                  console.log('🚀 HeroScreen: Navigating to UserBanners with localMode:', localMode);
+                  cropResultManager.setSourceScreen(localMode ? 'localMode' : 'normal');
+                  navigation.navigate('UserBanners', { sourceScreen: localMode ? 'localMode' : 'normal' });
+                }
+              } catch (e) {}
+            }}
+            activeOpacity={0.85}
+            accessibilityLabel={
+              bannerUri
+                ? (bannerEnabled ? "Hide banner" : "Show banner")
+                : "Choose banner"
+            }
+          >
+            <Feather name="tag" size={20} color="#fff" />
+          </TouchableOpacity>
+          {/* Draggability toggle icon */}
+          <TouchableOpacity
+            style={[styles.actionIconButton, !isDraggable && styles.actionIconButtonDisabled]}
+            onPress={() => {
+              setIsDraggable(prev => {
+                if (prev) {
+                  // Locking - hide menu bar
+                  setMenuVisible(false);
+                }
+                return !prev;
+              });
+            }}
+            activeOpacity={0.85}
+            accessibilityLabel={isDraggable ? "Lock elements" : "Unlock elements"}
+          >
+            <Feather name={isDraggable ? "unlock" : "lock"} size={20} color="#fff" />
+          </TouchableOpacity>
+          {/* Menu toggle icon - only show when unlocked */}
+          {isDraggable && (
+          <TouchableOpacity
+            style={styles.actionIconButton}
+            onPress={() => setMenuVisible(v => !v)}
+            activeOpacity={0.85}
+            accessibilityLabel="Toggle menu"
+          >
+            <Text style={styles.actionIconText}>☰</Text>
+          </TouchableOpacity>
+          )}
+        </View>
+        )}
       </View>
 
         {menuVisible && (
@@ -5151,6 +5154,7 @@ onHandlerStateChange={({ nativeEvent }) => {
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.menuScrollView}
+              contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
               keyboardShouldPersistTaps="handled"
               data={[{ key: 'menu' }]}
               keyExtractor={(item) => item.key}
@@ -5183,9 +5187,9 @@ onHandlerStateChange={({ nativeEvent }) => {
                   >
                     <View style={styles.menuIconCircle}>
                       {isRemovingBackground ? (
-                        <ResetSvgIcon color="#999" size={22} />
+                        <ResetSvgIcon color="#999" size={25} />
                       ) : (
-                        <WandSvgIcon color={(isRemovingBackground || !removeBgEnabled) ? '#999' : '#000'} size={22} />
+                        <WandSvgIcon color={(isRemovingBackground || !removeBgEnabled) ? '#999' : '#000'} size={25} />
                       )}
                     </View>
                     <Text style={[
@@ -5210,7 +5214,7 @@ onHandlerStateChange={({ nativeEvent }) => {
                     delayPressIn={0}
                   >
                     <View style={styles.menuIconCircle}>
-                      <BannerSvgIcon color="#000" size={22} />
+                      <BannerSvgIcon color="#000" size={25} />
                     </View>
                     <Text style={styles.menuLabelText} numberOfLines={1}>Banner</Text>
                   </TouchableOpacity>
@@ -5226,7 +5230,7 @@ onHandlerStateChange={({ nativeEvent }) => {
                     }}
                   >
                     <View style={styles.menuIconCircle}>
-                      <TextSvgIcon color="#000" size={22} />
+                      <TextSvgIcon color="#000" size={25} />
                     </View>
                     <Text style={styles.menuLabelText} numberOfLines={1}>Text</Text>
                   </TouchableOpacity>
@@ -5241,7 +5245,7 @@ onHandlerStateChange={({ nativeEvent }) => {
                     }}
                   >
                     <View style={styles.menuIconCircle}>
-                      <PhotoSvgIcon color="#000" size={22} />
+                      <PhotoSvgIcon color="#000" size={25} />
                     </View>
                     <Text style={styles.menuLabelText} numberOfLines={1}>Photo</Text>
                   </TouchableOpacity>
@@ -5300,19 +5304,32 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  appNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 0,
+  },
   appNameHeader: {
-    fontSize: 28,
+    fontSize: 47,
     fontFamily: 'Selima-Regular',
     color: '#9C27B0',
-    textAlign: 'center',
-    paddingTop: 12,
-    paddingBottom: 4,
+    marginLeft: 8,
+  },
+  headerRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   topBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
     paddingTop: 4,
     paddingBottom: 8,
   },
@@ -5453,10 +5470,14 @@ const styles = StyleSheet.create({
   },
   menuBar: {
     backgroundColor: '#FFFFFF',
-    paddingVertical: 8,
-    paddingBottom: 8,
+    paddingTop: 0,
+    paddingBottom: 4,
     zIndex: 300,
-    elevation: 8,
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
     position: 'absolute',
     left: 0,
     right: 0,
@@ -5481,21 +5502,23 @@ const styles = StyleSheet.create({
   menuRowContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 12,
     columnGap: 0,
     backgroundColor: 'transparent',
+    width: '100%',
   },
   menuIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 0,
     borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
     overflow: 'visible',
-    marginBottom: 2,
+    marginBottom: 0,
     shadowColor: 'transparent',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0,
@@ -5513,11 +5536,11 @@ const styles = StyleSheet.create({
   menuLabelText: {
     color: '#000000',
     fontWeight: 'bold',
-    fontSize: 14, // Increased for better readability in menu bar
+    fontSize: 12,
     textAlign: 'center',
     flexWrap: 'nowrap',
-    lineHeight: 16,
-    minHeight: 22,
+    lineHeight: 14,
+    minHeight: 16,
     marginTop: 0,
     width: '100%',
   },
@@ -5537,13 +5560,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
     borderRadius: 16,
     backgroundColor: 'transparent',
-    marginHorizontal: 6,
-    minWidth: 80,
-    width: 80,
+    marginHorizontal: 2,
+    minWidth: 63,
+    width: 63,
   },
   saveButton: {
     paddingHorizontal: 16,
@@ -5591,13 +5614,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
     borderRadius: 16,
     backgroundColor: 'transparent',
-    marginHorizontal: 6,
-    minWidth: 80,
-    width: 80,
+    marginHorizontal: 2,
+    minWidth: 63,
+    width: 63,
   },
   removeBgButtonIconDisabled: {
     opacity: 0.5,
@@ -5662,12 +5685,21 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     flex: 1,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: CONTAINER_PADDING,
+    paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: MENU_BAR_HEIGHT + 8,
     backgroundColor: '#ffffff',
+  },
+  leftActionIcons: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    justifyContent: 'flex-start',
+    paddingTop: 8,
+    zIndex: 80,
   },
   imageContainerWrapper: {
     position: 'relative',
@@ -6305,13 +6337,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
     borderRadius: 16,
     backgroundColor: 'transparent',
-    marginHorizontal: 6,
-    minWidth: 80,
-    width: 80,
+    marginHorizontal: 2,
+    minWidth: 63,
+    width: 63,
   },
   
   // Template button styles
@@ -6319,13 +6351,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
     borderRadius: 16,
     backgroundColor: 'transparent',
-    marginHorizontal: 6,
-    minWidth: 80,
-    width: 80,
+    marginHorizontal: 2,
+    minWidth: 63,
+    width: 63,
   },
   
   // Banner toggle button styles
@@ -6333,13 +6365,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
     borderRadius: 16,
     backgroundColor: 'transparent',
-    marginHorizontal: 6,
-    minWidth: 80,
-    width: 80,
+    marginHorizontal: 2,
+    minWidth: 63,
+    width: 63,
   },
   bannerButtonActive: {
     opacity: 1,
@@ -6532,7 +6564,7 @@ fabOverlay: {
     justifyContent: 'center',
     borderWidth: 0,
     borderColor: 'transparent',
-    marginBottom: 8,
+    marginBottom: 2,
     elevation: 0,
   },
   actionIconButtonDisabled: {

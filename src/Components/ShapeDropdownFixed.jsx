@@ -151,7 +151,7 @@ const ShapeDropdownFixed = ({ selectedShape, onShapeChange, style }) => {
         testID="shape-dropdown-button"
       >
         <View style={styles.menuIconCircle}>
-          <ShapeSvgIcon size={22} color="#000" />
+          <ShapeSvgIcon size={25} color="#000" />
         </View>
         <Text style={styles.menuLabelText}>Shape</Text>
       </TouchableOpacity>
@@ -213,25 +213,25 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
     borderRadius: 16,
     backgroundColor: 'transparent',
-    marginHorizontal: 6,
-    minWidth: 80,
-    width: 80,
+    marginHorizontal: 2,
+    minWidth: 63,
+    width: 63,
   },
   menuIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 0,
     borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
     overflow: 'visible',
-    marginBottom: 2,
+    marginBottom: 0,
     shadowColor: 'transparent',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0,
@@ -246,11 +246,11 @@ const styles = StyleSheet.create({
   menuLabelText: {
     color: '#2C3E50',
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     lineHeight: 14,
-    minHeight: 28,
+    minHeight: 16,
     width: '100%',
     letterSpacing: 0.2,
   },
