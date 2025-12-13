@@ -227,7 +227,12 @@ const DynamicPhotoElement = ({
   containerHeight,
   minSize = 60,
   maxSize = 200,
+  isDraggable = true,
 }) => {
+  const isDraggableLocalRef = React.useRef(isDraggable);
+  React.useEffect(() => {
+    isDraggableLocalRef.current = isDraggable;
+  }, [isDraggable]);
   const translateX = useSharedValue(x || 0);
   const translateY = useSharedValue(y || 0);
   const lastPropX = React.useRef(x || 0);
@@ -270,9 +275,11 @@ const DynamicPhotoElement = ({
       // Let taps fall through to onPress handler; only capture when moving
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
+        if (!isDraggableLocalRef.current) return false;
         return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
       },
       onPanResponderGrant: () => {
+        if (!isDraggableLocalRef.current) return;
         startXRef.current = translateX.value;
         startYRef.current = translateY.value;
         isDraggingRef.current = false;
@@ -281,6 +288,7 @@ const DynamicPhotoElement = ({
         try { onDragStart && onDragStart(id); } catch (e) {}
       },
       onPanResponderMove: (evt, gestureState) => {
+        if (!isDraggableLocalRef.current) return; // Check draggability
         if (Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2) {
           hasMovedRef.current = true;
         }
@@ -363,9 +371,13 @@ const DynamicPhotoElement = ({
   const initialResizeRef = React.useRef({ size: size, cx: 0, cy: 0 });
   const resizeResponder = React.useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (evt, gestureState) => Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
+      onStartShouldSetPanResponder: () => isDraggableLocalRef.current,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        if (!isDraggableLocalRef.current) return false;
+        return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
+      },
       onPanResponderGrant: () => {
+        if (!isDraggableLocalRef.current) return;
         const s = size || minSize;
         const startX = translateX.value;
         const startY = translateY.value;
@@ -374,6 +386,7 @@ const DynamicPhotoElement = ({
         initialResizeRef.current = { size: s, cx, cy };
       },
       onPanResponderMove: (evt, gestureState) => {
+        if (!isDraggableLocalRef.current) return; // Check draggability
         const delta = (gestureState.dx + gestureState.dy) / 2;
         // Match static behavior: invert direction
         let proposedSize = initialResizeRef.current.size - delta;
@@ -1224,7 +1237,7 @@ const HeroScreen = ({ route, navigation }) => {
   const [trackedPhoto2Uri, setTrackedPhoto2Uri] = useState(null);
   
   // Photo container size state - simplified
-  const [photo1Size, setPhoto1Size] = useState(100); // Default size 100px
+  const [photo1Size, setPhoto1Size] = useState(150); // Default size 150px (increased by 50%)
   const [photo2Size, setPhoto2Size] = useState(100);
   const minPhotoSize = 60; // Minimum photo container size
   const maxPhotoSize = 200; // Maximum photo container size
@@ -2684,6 +2697,14 @@ React.useEffect(() => {
   
   // Banner toggle state
   const [bannerEnabled, setBannerEnabled] = useState(false);
+  // Draggability toggle state (for text and photo containers)
+  const [isDraggable, setIsDraggable] = useState(true);
+  const isDraggableRef = useRef(true); // Ref for PanResponder access
+
+  // Keep ref in sync with state
+  React.useEffect(() => {
+    isDraggableRef.current = isDraggable;
+  }, [isDraggable]);
   // Cropped banner image URI
   const [bannerUri, setBannerUri] = useState(null);
   // Focus state for banner (controls showing ✕)
@@ -3065,7 +3086,7 @@ React.useEffect(() => {
   const addPhotoElement = () => {
     // Calculate safe positioning within container bounds with variation
     const padding = 20;
-    const photoSize = 100; // Default photo size
+    const photoSize = 150; // Default photo size (increased by 50%)
     
     // Get current number of photo elements to vary positioning
     const currentCount = photoElements.length;
@@ -4190,14 +4211,17 @@ React.useEffect(() => {
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
+        if (!isDraggableRef.current) return false; // Check draggability
         return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
       },
       onPanResponderGrant: (evt, gestureState) => {
+        if (!isDraggableRef.current) return; // Check draggability
         startPan1X.current = pan1X.value;
         startPan1Y.current = pan1Y.value;
         try { isDraggingRef.current = true; } catch (e) {}
       },
       onPanResponderMove: (evt, gestureState) => {
+        if (!isDraggableRef.current) return; // Check draggability
         const padding = BOUND_PADDING;
         const maxX = containerWidth - photo1Size - padding;
         const maxY = containerHeight - photo1Size - padding;
@@ -4205,10 +4229,10 @@ React.useEffect(() => {
         const minY = padding;
         // Mark that user has manually moved the static photo
         try { hasUserMovedStaticPhotoRef.current = true; } catch (e) {}
-        
+
         const newX = Math.max(minX, Math.min(maxX, startPan1X.current + gestureState.dx));
         const newY = Math.max(minY, Math.min(maxY, startPan1Y.current + gestureState.dy));
-        
+
         pan1X.value = newX;
         pan1Y.value = newY;
       },
@@ -4226,9 +4250,13 @@ React.useEffect(() => {
   const initialPhoto1Resize = useRef({ size: photo1Size, cx: 0, cy: 0 });
   const resizePanResponder1 = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (evt, gestureState) => Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
+      onStartShouldSetPanResponder: () => isDraggableRef.current, // Check draggability
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        if (!isDraggableRef.current) return false; // Check draggability
+        return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
+      },
       onPanResponderGrant: () => {
+        if (!isDraggableRef.current) return; // Check draggability
         const sizeAtStart = photo1Size;
         const startX = typeof pan1X?.value === 'number' ? pan1X.value : 0;
         const startY = typeof pan1Y?.value === 'number' ? pan1Y.value : 0;
@@ -4237,6 +4265,7 @@ React.useEffect(() => {
         initialPhoto1Resize.current = { size: sizeAtStart, cx, cy };
       },
       onPanResponderMove: (evt, gestureState) => {
+        if (!isDraggableRef.current) return; // Check draggability
         // Use average of dx,dy to scale square size smoothly on diagonal drags
         const delta = (gestureState.dx + gestureState.dy) / 2;
         // Invert direction as requested
@@ -4321,6 +4350,11 @@ React.useEffect(() => {
   return (
     <>
       <View style={{ flex: 1 }}>
+
+        {/* App Name */}
+        {!localMode && (
+          <Text style={styles.appNameHeader}>Winter</Text>
+        )}
 
         {/* Top row: Category tabs (left) and Profile photo (right) */}
         {!localMode && (
@@ -4753,7 +4787,7 @@ onHandlerStateChange={({ nativeEvent }) => {
                 </TouchableOpacity>
 
                 {/* Banner on/off or navigate to "Your Banners" */}
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.actionIconButton}
                   onPress={async () => {
                     try {
@@ -4778,6 +4812,15 @@ onHandlerStateChange={({ nativeEvent }) => {
                   }
                 >
                   <Feather name="tag" size={20} color="#fff" />
+                </TouchableOpacity>
+                {/* Draggability toggle icon */}
+                <TouchableOpacity
+                  style={[styles.actionIconButton, !isDraggable && styles.actionIconButtonDisabled]}
+                  onPress={() => setIsDraggable(prev => !prev)}
+                  activeOpacity={0.85}
+                  accessibilityLabel={isDraggable ? "Lock elements" : "Unlock elements"}
+                >
+                  <Feather name={isDraggable ? "unlock" : "lock"} size={20} color="#fff" />
                 </TouchableOpacity>
                 {/* Menu toggle icon */}
                 <TouchableOpacity
@@ -4810,9 +4853,9 @@ onHandlerStateChange={({ nativeEvent }) => {
                               try {
                                 setShowBannerDialog(false);
                                 // Pass localMode so banner result comes back to correct HeroScreen type
-                                console.log('🚀 HeroScreen: Navigating to BannerCreate with localMode:', localMode);
+                                console.log('🚀 HeroScreen: Navigating to BannerCreator with localMode:', localMode);
                                 cropResultManager.setSourceScreen(localMode ? 'localMode' : 'normal');
-                                navigation.navigate('BannerCreate', { ratio: '5:1', sourceScreen: localMode ? 'localMode' : 'normal' });
+                                navigation.navigate('BannerCreator', { sourceScreen: localMode ? 'localMode' : 'normal' });
                               } catch {}
                             }}
                             activeOpacity={0.85}
@@ -5044,6 +5087,7 @@ onHandlerStateChange={({ nativeEvent }) => {
                 }}
                 onDragStart={() => { try { isDraggingRef.current = true; } catch (e) {} }}
                 onDragEnd={() => { try { isDraggingRef.current = false; } catch (e) {} }}
+                isDraggable={isDraggable}
               />
               );
             })}
@@ -5089,6 +5133,7 @@ onHandlerStateChange={({ nativeEvent }) => {
                   containerHeight={containerHeight}
                   minSize={minPhotoSize}
                   maxSize={maxPhotoSize}
+                  isDraggable={isDraggable}
                 />
               );
             })}
@@ -5255,12 +5300,20 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  appNameHeader: {
+    fontSize: 28,
+    fontFamily: 'Selima-Regular',
+    color: '#9C27B0',
+    textAlign: 'center',
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
   topBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 4,
     paddingBottom: 8,
   },
   topBarRightRow: {
@@ -6481,6 +6534,9 @@ fabOverlay: {
     borderColor: 'transparent',
     marginBottom: 8,
     elevation: 0,
+  },
+  actionIconButtonDisabled: {
+    backgroundColor: 'rgba(180,80,80,0.5)',
   },
   actionIconText: {
     color: '#ffffff',

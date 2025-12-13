@@ -3,7 +3,7 @@ const AppConfig = {
   PRODUCTION_AUTH_SERVER_URL:  'https://codebinary.in',
   
   APP_NAME: 'Winter',
-  VERSION: '1.0.8',
+  VERSION: '1.0.9',
   
   BACKGROUND_REMOVAL: {
     MAX_IMAGES_PER_BATCH: 10,

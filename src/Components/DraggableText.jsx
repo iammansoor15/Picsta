@@ -16,9 +16,9 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { COLORS } from '../theme/colors';
 
-const DraggableText = ({ 
-  textElement, 
-  onTextChange, 
+const DraggableText = ({
+  textElement,
+  onTextChange,
   onPositionChange,
   onSizeChange,
   onDelete,
@@ -31,6 +31,7 @@ const DraggableText = ({
   onStylePress,
   onDragStart,
   onDragEnd,
+  isDraggable = true,
 }) => {
   const translateX = useSharedValue(textElement.x || 0);
   const translateY = useSharedValue(textElement.y || 0);
@@ -128,17 +129,25 @@ const DraggableText = ({
   // PanResponder for dragging with boundary constraints
   const startXRef = useRef(0);
   const startYRef = useRef(0);
-  
+  const isDraggableRef = useRef(isDraggable);
+
+  // Keep ref in sync with prop
+  useEffect(() => {
+    isDraggableRef.current = isDraggable;
+  }, [isDraggable]);
+
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !isEditing,
-      onMoveShouldSetPanResponder: (evt, gestureState) => !isEditing && (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3),
+      onStartShouldSetPanResponder: () => !isEditing && isDraggableRef.current,
+      onMoveShouldSetPanResponder: (evt, gestureState) => !isEditing && isDraggableRef.current && (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3),
       onPanResponderGrant: () => {
+        if (!isDraggableRef.current) return;
         try { onDragStart && onDragStart(); } catch (e) {}
         startXRef.current = translateX.value;
         startYRef.current = translateY.value;
       },
       onPanResponderMove: (e, gestureState) => {
+        if (!isDraggableRef.current) return; // Check draggability
         // Calculate boundaries with minimal padding for full movement
         const padding = 5; // Reduced padding to allow movement to edges
         const textWidth = containerDimensions.width || 120;
@@ -224,15 +233,17 @@ const DraggableText = ({
   const resizeResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => {
-        console.log('📏 Resize handle touched - should set responder: true');
-        return true;
+        console.log('📏 Resize handle touched - should set responder:', isDraggableRef.current);
+        return isDraggableRef.current;
       },
       onMoveShouldSetPanResponder: (evt, gestureState) => {
+        if (!isDraggableRef.current) return false;
         const shouldMove = Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
         console.log('📏 Should move responder:', shouldMove, { dx: gestureState.dx, dy: gestureState.dy });
         return shouldMove;
       },
       onPanResponderGrant: () => {
+        if (!isDraggableRef.current) return;
         setIsResizing(true);
         // Use persistent dimensions if available, fallback to container state
         const currentWidth = hasBeenResized ? persistentDimensions.current.width : containerDimensions.width;
@@ -256,6 +267,7 @@ const DraggableText = ({
         });
       },
       onPanResponderMove: (evt, gestureState) => {
+        if (!isDraggableRef.current) return; // Check draggability
         // Horizontal drag = change width
         const minWidth = 60;
         const maxWidth = containerWidth * 0.95; // Max 95% of container width

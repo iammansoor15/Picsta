@@ -19,6 +19,7 @@ import Crop from './src/Components/Crop';
 import BannerCrop from './src/Components/BannerCrop';
 import TemplateCrop from './src/Components/TemplateCrop';
 import BannerCreate from './src/Components/BannerCreate';
+import BannerCreatorScreen from './src/screens/BannerCreatorScreen';
 import UserBannersScreen from './src/screens/UserBannersScreen';
 import UserTemplatesScreen from './src/screens/UserTemplatesScreen';
 import RegisterWithOTP from './src/screens/RegisterWithOTP';
@@ -217,10 +218,20 @@ export default function App() {
               }}
             />
 
-            {/* Banner Create Screen */}
-            <Stack.Screen 
-              name="BannerCreate" 
+            {/* Banner Create Screen (legacy - simple banner) */}
+            <Stack.Screen
+              name="BannerCreate"
               component={BannerCreate}
+              options={{
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
+
+            {/* Banner Creator Screen (tabbed - simple + colorful) */}
+            <Stack.Screen
+              name="BannerCreator"
+              component={BannerCreatorScreen}
               options={{
                 headerShown: false,
                 animation: 'slide_from_right',
