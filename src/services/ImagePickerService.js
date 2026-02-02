@@ -3,29 +3,29 @@ import { Alert, PermissionsAndroid, Platform, Linking } from 'react-native';
 
 class ImagePickerService {
   // Check if we already have permissions
+  // Note: Android 13+ uses Photo Picker which doesn't require runtime permissions
   static async checkPermissions() {
     if (Platform.OS !== 'android') {
       return { hasPermission: true, canRequest: true };
     }
 
-    try {
-      // For Android 13+, we need READ_MEDIA_IMAGES and READ_MEDIA_VIDEO
-      const permissions = Platform.Version >= 33 
-        ? [PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES, PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO]
-        : [PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE];
-      
-      // Check first permission (images)
-      const permission = permissions[0];
+    // Android 13+ (API 33+) uses Photo Picker - no permissions needed
+    if (Platform.Version >= 33) {
+      return { hasPermission: true, canRequest: true };
+    }
 
+    try {
+      // For Android 10-12, check READ_EXTERNAL_STORAGE
+      const permission = PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
       const hasPermission = await PermissionsAndroid.check(permission);
-      
+
       if (hasPermission) {
         return { hasPermission: true, canRequest: true };
       }
 
       // Check if we can request permission (not permanently denied)
       const canRequest = await PermissionsAndroid.shouldShowRequestPermissionRationale(permission);
-      
+
       return { hasPermission: false, canRequest: canRequest !== false };
     } catch (err) {
       console.warn('Permission check error:', err);
@@ -34,15 +34,21 @@ class ImagePickerService {
   }
 
   // Request permissions for Android
+  // Note: Android 13+ uses Photo Picker which handles its own permissions
   static async requestStoragePermission() {
     if (Platform.OS !== 'android') {
+      return true;
+    }
+
+    // Android 13+ (API 33+) uses Photo Picker - no permissions needed
+    if (Platform.Version >= 33) {
       return true;
     }
 
     try {
       // Check current permission status first
       const { hasPermission, canRequest } = await this.checkPermissions();
-      
+
       if (hasPermission) {
         return true;
       }
@@ -51,38 +57,31 @@ class ImagePickerService {
         // Permission was permanently denied, guide user to settings
         Alert.alert(
           'Permission Required',
-          'Photo access was permanently denied. Please go to Settings > Apps > Narayana > Permissions and enable Photos/Media access.',
+          'Photo access was permanently denied. Please go to Settings > Apps > Picstar > Permissions and enable Photos/Media access.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Open Settings', 
-              onPress: () => Linking.openSettings() 
+            {
+              text: 'Open Settings',
+              onPress: () => Linking.openSettings()
             }
           ]
         );
         return false;
       }
 
-      // For Android 13+, request both image and video permissions
-      const permissions = Platform.Version >= 33 
-        ? [PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES, PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO]
-        : [PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE];
-
-      const granted = await PermissionsAndroid.requestMultiple(
-        permissions,
+      // For Android 10-12, request READ_EXTERNAL_STORAGE
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
         {
           title: 'Media Access Required',
-          message: 'This app needs access to your photos and videos to select media for templates. This allows you to create custom templates with your own images and videos.',
+          message: 'This app needs access to your photos and videos to select media for templates.',
           buttonNeutral: 'Ask Me Later',
           buttonNegative: 'Deny',
           buttonPositive: 'Allow',
         }
       );
-      
-      // Check if all permissions were granted
-      const allGranted = permissions.every(p => granted[p] === PermissionsAndroid.RESULTS.GRANTED);
 
-      if (allGranted) {
+      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
         return true;
       } else {
         Alert.alert(
@@ -104,16 +103,22 @@ class ImagePickerService {
   }
 
   // Preemptively request permissions (call this when modal opens)
+  // Note: Android 13+ uses Photo Picker which doesn't require runtime permissions
   static async requestPermissionPreemptively() {
+    // Android 13+ uses Photo Picker - no permissions needed
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      return true;
+    }
+
     try {
       console.log('Preemptively checking photo permissions...');
       const { hasPermission, canRequest } = await this.checkPermissions();
-      
+
       if (hasPermission) {
         console.log('Photo permissions already granted');
         return true;
       }
-      
+
       if (canRequest) {
         // Show informative dialog before requesting permission
         return new Promise((resolve) => {
@@ -121,12 +126,12 @@ class ImagePickerService {
             'Photo Access Needed',
             'To add custom templates with your own images, this app needs access to your photos. Would you like to grant access now?',
             [
-              { 
-                text: 'Not Now', 
+              {
+                text: 'Not Now',
                 style: 'cancel',
                 onPress: () => resolve(false)
               },
-              { 
+              {
                 text: 'Grant Access',
                 onPress: async () => {
                   const granted = await this.requestStoragePermission();
@@ -143,9 +148,9 @@ class ImagePickerService {
           'To add custom templates, please enable photo access in your device settings.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Open Settings', 
-              onPress: () => Linking.openSettings() 
+            {
+              text: 'Open Settings',
+              onPress: () => Linking.openSettings()
             }
           ]
         );

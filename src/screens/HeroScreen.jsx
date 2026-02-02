@@ -950,6 +950,7 @@ const HeroScreen = ({ route, navigation }) => {
       }, 100);
     }
   }, [globalReligion, resetHeroScreen, refreshForSelection, selectedCategory]);
+
   useFocusEffect(
     React.useCallback(() => {
       if (localMode) return () => {};
@@ -3269,26 +3270,26 @@ React.useEffect(() => {
 
 
   // Request storage permission for Android
+  // Note: Android 13+ (API 33+) uses MediaStore API for saving which doesn't require permissions
   const requestStoragePermission = async () => {
     if (Platform.OS !== 'android') {
       return true;
     }
 
+    const androidVersion = Platform.Version;
+
+    // Android 13+ (API 33+) - MediaStore saves don't require runtime permissions
+    if (androidVersion >= 33) {
+      return true;
+    }
+
     try {
-      // For Android 13+ (API 33+), we need READ_MEDIA_IMAGES
-      // For Android 10-12 (API 29-32), we need READ_EXTERNAL_STORAGE  
+      // For Android 10-12 (API 29-32), we need READ_EXTERNAL_STORAGE
       // For Android 9 and below (API 28-), we need WRITE_EXTERNAL_STORAGE
-      
-      const androidVersion = Platform.Version;
-      
       let permission;
       let permissionName;
-      
-      if (androidVersion >= 33) {
-        // Android 13+
-        permission = 'android.permission.READ_MEDIA_IMAGES';
-        permissionName = 'Media Images Access';
-      } else if (androidVersion >= 29) {
+
+      if (androidVersion >= 29) {
         // Android 10-12
         permission = PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
         permissionName = 'Storage Access';
@@ -3297,14 +3298,13 @@ React.useEffect(() => {
         permission = PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE;
         permissionName = 'Storage Access';
       }
-      
-      
+
       // Check if permission is already granted
       const hasPermission = await PermissionsAndroid.check(permission);
       if (hasPermission) {
         return true;
       }
-      
+
       const granted = await PermissionsAndroid.request(
         permission,
         {
@@ -3315,14 +3315,8 @@ React.useEffect(() => {
           buttonPositive: 'Allow',
         },
       );
-      
-      const isGranted = granted === PermissionsAndroid.RESULTS.GRANTED;
-      
-      if (!isGranted) {
-      } else {
-      }
-      
-      return isGranted;
+
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
     } catch (err) {
       return false;
     }
@@ -3330,6 +3324,20 @@ React.useEffect(() => {
 
   // Save template function
   const saveTemplate = async () => {
+    // Check guest mode
+    const isGuest = await AsyncStorage.getItem('GUEST_MODE');
+    if (isGuest === 'true') {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to download templates.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('RegisterWithOTP') }
+        ]
+      );
+      return;
+    }
+
     try {
       setIsSaving(true);
       setError(null);
@@ -3530,9 +3538,23 @@ React.useEffect(() => {
 
   // Share template function
   const shareTemplate = async () => {
+    // Check guest mode
+    const isGuest = await AsyncStorage.getItem('GUEST_MODE');
+    if (isGuest === 'true') {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to share templates.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('RegisterWithOTP') }
+        ]
+      );
+      return;
+    }
+
     try {
       setError(null);
-      
+
       // Check if current template is a video
       const currentTemplate = reelsTemplates && reelsTemplates.length > 0 ? reelsTemplates[currentReelIndex] : null;
       const isVideo = currentTemplate?.resource_type === 'video' || !!currentTemplate?.video_url;

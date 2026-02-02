@@ -259,6 +259,15 @@ const RegisterWithOTP = ({ navigation }) => {
     setError('');
   };
 
+  // Skip authentication
+  const handleSkip = async () => {
+    await AsyncStorage.setItem('GUEST_MODE', 'true');
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'HeroScreen' }],
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f8f9fa" />
@@ -267,6 +276,13 @@ const RegisterWithOTP = ({ navigation }) => {
         style={styles.keyboardView}
       >
         <View style={styles.content}>
+          {/* Skip Button - Top Right */}
+          <View style={styles.topBar}>
+            <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
+              <Text style={styles.skipButtonText}>Guest Mode</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>{mode === 'register' ? 'Register' : 'Sign In'}</Text>
@@ -619,6 +635,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: COLORS.primary || '#007AFF',
     fontWeight: '700',
+  },
+  topBar: {
+    position: 'absolute',
+    top: 16,
+    right: 0,
+    left: 0,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    zIndex: 10,
+  },
+  skipButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.primary || '#007AFF',
+    borderRadius: 20,
+  },
+  skipButtonText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '600',
   },
 });
 

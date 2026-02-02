@@ -190,6 +190,14 @@ export default function ModernAuth({ navigation }) {
     return { phone: id.trim(), ...extra };
   };
 
+  const handleSkip = async () => {
+    await AsyncStorage.setItem('GUEST_MODE', 'true');
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'HeroScreen' }],
+    });
+  };
+
   const renderInput = (placeholder, value, onChangeText, keyboardType = 'default', secureTextEntry = false, fieldName, icon) => (
     <Animated.View 
       style={[
@@ -267,10 +275,8 @@ export default function ModernAuth({ navigation }) {
         
         {/* Header */}
         <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <View style={styles.backIcon}>
-              <Text style={styles.backText}>✕</Text>
-            </View>
+          <TouchableOpacity onPress={handleSkip} style={styles.skipBtnHeader}>
+            <Text style={styles.skipTextHeader}>Skip</Text>
           </TouchableOpacity>
         </Animated.View>
 
@@ -392,8 +398,8 @@ export default function ModernAuth({ navigation }) {
 
             {/* Footer */}
             <Text style={styles.footerText}>
-              {mode === 'login' 
-                ? "New to PICSTAR? Tap Sign Up" 
+              {mode === 'login'
+                ? "New to PICSTAR? Tap Sign Up"
                 : "Already have an account? Tap Sign In"
               }
             </Text>
@@ -442,24 +448,16 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     alignItems: 'flex-end',
   },
-  backBtn: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  skipBtnHeader: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  backText: {
-    fontSize: 18,
+  skipTextHeader: {
+    fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '600',
   },

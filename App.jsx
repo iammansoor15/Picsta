@@ -76,13 +76,18 @@ export default function App() {
   
   // Handle deep linking or navigation actions
   const linking = {
-    prefixes: ['narayana://'],
+    prefixes: [
+      'https://codebinary.in',
+      'http://codebinary.in',
+    ],
     config: {
         screens: {
           SplashScreen: 'splash',
           HeroScreen: 'edit',
           Crop: 'crop',
           BannerCrop: 'banner-crop',
+          ProfileScreen: 'profile',
+          SubscriptionGate: 'subscribe',
         },
     },
   };

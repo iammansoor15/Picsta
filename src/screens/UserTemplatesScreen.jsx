@@ -38,6 +38,7 @@ import { selectProfileImage } from '../store/slices/profileSlice';
 import Feather from 'react-native-vector-icons/Feather';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import HeroScreen from './HeroScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const MENU_BAR_HEIGHT = 113;
@@ -816,35 +817,42 @@ const UserTemplatesScreen = ({ navigation }) => {
   };
 
   // Request storage permission (Android)
+  // Note: Android 13+ (API 33+) uses MediaStore API for saving which doesn't require permissions
   const requestStoragePermission = async () => {
     if (Platform.OS !== 'android') {
       return true;
     }
+
+    const androidVersion = Platform.Version;
+
+    // Android 13+ (API 33+) - MediaStore saves don't require runtime permissions
+    if (androidVersion >= 33) {
+      return true;
+    }
+
     try {
-      const androidVersion = Platform.Version;
       let permission;
       let permissionName;
-      
-      if (androidVersion >= 33) {
-        permission = 'android.permission.READ_MEDIA_IMAGES';
-        permissionName = 'Media Images Access';
-      } else if (androidVersion >= 29) {
+
+      if (androidVersion >= 29) {
+        // Android 10-12
         permission = PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
         permissionName = 'Storage Access';
       } else {
+        // Android 9 and below
         permission = PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE;
         permissionName = 'Storage Access';
       }
-      
+
       const hasPermission = await PermissionsAndroid.check(permission);
       if (hasPermission) return true;
-      
+
       const granted = await PermissionsAndroid.request(permission, {
         title: `${permissionName} Permission`,
         message: `This app needs ${permissionName.toLowerCase()} permission to save your templates.`,
         buttonPositive: 'Allow',
       });
-      
+
       return granted === PermissionsAndroid.RESULTS.GRANTED;
     } catch (err) {
       return false;
@@ -853,9 +861,23 @@ const UserTemplatesScreen = ({ navigation }) => {
 
   // Share template function
   const shareTemplate = async () => {
+    // Check guest mode
+    const isGuest = await AsyncStorage.getItem('GUEST_MODE');
+    if (isGuest === 'true') {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to share templates.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('RegisterWithOTP') }
+        ]
+      );
+      return;
+    }
+
     try {
       setIsSharing(true);
-      
+
       const hasPermission = await requestStoragePermission();
       if (!hasPermission) {
         Alert.alert('Permission Required', 'Storage permission is required to share the template.');
@@ -893,9 +915,23 @@ const UserTemplatesScreen = ({ navigation }) => {
 
   // Download/Save functionality
   const handleDownload = async () => {
+    // Check guest mode
+    const isGuest = await AsyncStorage.getItem('GUEST_MODE');
+    if (isGuest === 'true') {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to download templates.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('RegisterWithOTP') }
+        ]
+      );
+      return;
+    }
+
     try {
       setIsSaving(true);
-      
+
       const hasPermission = await requestStoragePermission();
       if (!hasPermission) {
         Alert.alert(
