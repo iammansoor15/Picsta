@@ -2,7 +2,10 @@ buildscript {
     ext {
         buildToolsVersion = "35.0.0"
         minSdkVersion = 24
-        compileSdkVersion = 35
+        // Bumped for androidx.media3 1.11.x (VideoComposerModule) - AAR metadata requires
+        // compileSdk >= 36. targetSdkVersion intentionally left at 35: compileSdk only
+        // changes which APIs are visible at compile time, not runtime behavior.
+        compileSdkVersion = 36
         targetSdkVersion = 35
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.1.20"

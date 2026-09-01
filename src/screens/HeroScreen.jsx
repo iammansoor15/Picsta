@@ -62,6 +62,7 @@ import AntDesign from 'react-native-vector-icons/AntDesign';
 import { Svg, Path, Rect, Circle, Line } from 'react-native-svg';
 import { uploadTemplate } from '../store/slices/cloudinaryTemplateSlice';
 import { computeDefaultPositions } from '../utils/DefaultPositions';
+import { logAuthState, logGateDecision } from '../utils/authDebug';
 import { selectProfileImage, selectOriginalProfileImage, selectProfileDisplayName } from '../store/slices/profileSlice';
 import ProfileImageStatusService from '../services/ProfileImageStatusService';
 import { selectCategories, loadCategories, fetchCategoriesFromServer } from '../store/slices/categorySlice';
@@ -138,6 +139,10 @@ const TemplateSvgIcon = ({ size = 28, color = '#000' }) => (
     <Path d="M9 7h6M9 11h6M9 15h4" stroke={color} strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );
+
+// Default photo container size when no template axis size is saved (30% smaller than the
+// old fixed 150px default). Must match the initial photo1Size state below.
+const DEFAULT_PHOTO_SIZE = 105;
 
 // Bounds
 const MIN_CONTAINER_WIDTH = 200;
@@ -582,7 +587,10 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
   const showBuffering = false; // Disabled for smooth scroll experience
 
   return (
-    <View style={{ width: containerWidth, height: containerHeight, backgroundColor: captureBgColor || 'transparent' }}>
+    // Letterbar fill: a non-9:16 source is now shown whole (resizeMode/object-fit "contain"
+    // below) instead of cropped to fill, so this background shows through on the short axis -
+    // matching how a screenshot of a square/portrait post looks in a phone gallery viewer.
+    <View style={{ width: containerWidth, height: containerHeight, backgroundColor: captureBgColor || COLORS.black }}>
       {isVideo ? (
         <>
           {videoSource && !hideVideoForCapture ? (
@@ -590,14 +598,14 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
               ref={videoRef}
               source={{ uri: videoSource }}
               style={{ width: '100%', height: '100%' }}
-              resizeMode="cover"
+              resizeMode="contain"
               repeat={true}
               muted={!isCurrentVideo}
               volume={isCurrentVideo ? 1.0 : 0}
               paused={!isCurrentVideo}
               controls={false}
               ignoreSilentSwitch="ignore"
-              posterResizeMode="cover"
+              posterResizeMode="contain"
               poster={imageUrl}
               bufferConfig={{
                 minBufferMs: 3000,  // Optimized for instant playback
@@ -640,14 +648,8 @@ const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCur
         <View style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
           <Image
             source={{ uri: imageUrl }}
-            style={{
-              width: containerWidth,
-              height: Math.max(containerHeight, containerWidth * (16 / 9)),
-              position: 'absolute',
-              top: 0,
-              left: 0
-            }}
-            resizeMode="cover"
+            style={{ width: '100%', height: '100%' }}
+            resizeMode="contain"
             onLoad={() => {
               console.log(`✅ Image loaded at index ${index}, serial: ${item?.serial_no}`);
             }}
@@ -1238,7 +1240,7 @@ const HeroScreen = ({ route, navigation }) => {
   const [trackedPhoto2Uri, setTrackedPhoto2Uri] = useState(null);
   
   // Photo container size state - simplified
-  const [photo1Size, setPhoto1Size] = useState(150); // Default size 150px (increased by 50%)
+  const [photo1Size, setPhoto1Size] = useState(105); // Default size 105px (150 * 0.7, 30% smaller)
   const [photo2Size, setPhoto2Size] = useState(100);
   const minPhotoSize = 60; // Minimum photo container size
   const maxPhotoSize = 200; // Maximum photo container size
@@ -1695,6 +1697,7 @@ const HeroScreen = ({ route, navigation }) => {
 
           const rawX = Number(axis?.x);
           const rawY = Number(axis?.y);
+          const rawSize = Number(axis?.width) || Number(axis?.height); // photo is square
           const currentSerial = doc?.serial_no;
 
           if (Number.isFinite(rawX) && Number.isFinite(rawY)) {
@@ -1702,9 +1705,19 @@ const HeroScreen = ({ route, navigation }) => {
             const scaledX = Math.round(rawX * scaleX);
             const scaledY = Math.round(rawY * scaleY);
 
+            // Scale the saved size too - previously only x/y were scaled and the photo
+            // always rendered at the photo1Size state's current value (sticky across
+            // templates, defaulting to a fixed px), never the size configured for this
+            // template. Fall back to DEFAULT_PHOTO_SIZE for legacy templates with no
+            // saved size, not whatever size happens to be left over from the last template.
+            const scaledSize = Number.isFinite(rawSize) && rawSize > 0
+              ? Math.round(rawSize * scaleX)
+              : DEFAULT_PHOTO_SIZE;
+            const newPhotoSize = Math.max(minPhotoSize, Math.min(maxPhotoSize, scaledSize));
+
             const padding = 10;
-            const maxX = Math.max(padding, containerWidth - photo1Size - padding);
-            const maxY = Math.max(padding, containerHeight - photo1Size - padding);
+            const maxX = Math.max(padding, containerWidth - newPhotoSize - padding);
+            const maxY = Math.max(padding, containerHeight - newPhotoSize - padding);
             const clampedX = Math.max(padding, Math.min(maxX, scaledX));
             const clampedY = Math.max(padding, Math.min(maxY, scaledY));
 
@@ -1713,14 +1726,15 @@ const HeroScreen = ({ route, navigation }) => {
 
             if (isDifferentTemplate) {
               try {
+                setPhoto1Size(newPhotoSize);
                 if (pan1X && typeof pan1X.value !== 'undefined') pan1X.value = clampedX;
                 if (pan1Y && typeof pan1Y.value !== 'undefined') pan1Y.value = clampedY;
                 lastAppliedPhotoAxisSerial.current = currentSerial;
                 // Reset the manual movement flag for this new template
                 hasUserMovedStaticPhotoRef.current = false;
                 console.log('📍 Applied photo axis from template schema:', {
-                  raw: { x: rawX, y: rawY },
-                  scaled: { x: scaledX, y: scaledY },
+                  raw: { x: rawX, y: rawY, size: rawSize },
+                  scaled: { x: scaledX, y: scaledY, size: newPhotoSize },
                   clamped: { x: clampedX, y: clampedY },
                   scale: { x: scaleX.toFixed(2), y: scaleY.toFixed(2) },
                   ref: { w: refW, h: refH },
@@ -1800,7 +1814,7 @@ const HeroScreen = ({ route, navigation }) => {
                     color: COLORS.primary,
                     fontWeight: 'bold',
                     textAlign: 'center',
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)'
+                    backgroundColor: 'transparent'
                   };
                   try { if (defaultTextAddedRef && defaultTextAddedRef.current !== undefined) defaultTextAddedRef.current = true; } catch {}
                   lastAppliedTextAxisSerial.current = currentSerial;
@@ -1842,7 +1856,7 @@ const HeroScreen = ({ route, navigation }) => {
       console.error('❌ Error in applyDocToTemplate:', e);
     }
     return false;
-  }, [getTemplateUri, setTemplateImage, setReelsTemplates, containerWidth, containerHeight, photo1Size, pan1X, pan1Y, textElements, setTextElements, userName, profileDisplayName]);
+  }, [getTemplateUri, setTemplateImage, setReelsTemplates, containerWidth, containerHeight, photo1Size, setPhoto1Size, minPhotoSize, maxPhotoSize, pan1X, pan1Y, textElements, setTextElements, userName, profileDisplayName]);
 
   // const CATEGORY_KEY = 'congratulations'; // replaced by selectedCategory state
 
@@ -2919,7 +2933,7 @@ React.useEffect(() => {
       color: textColor,
       fontWeight: 'bold',
       textAlign: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.8)', // Darker background for better contrast
+      backgroundColor: 'transparent',
     };
     
     
@@ -2962,7 +2976,7 @@ React.useEffect(() => {
       color: COLORS.primary,
       fontWeight: 'bold',
       textAlign: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.8)'
+      backgroundColor: 'transparent'
     };
     setTextElements(prev => (prev && prev.length > 0 ? prev : [newTextElement]));
     defaultTextAddedRef.current = true;
@@ -3322,10 +3336,81 @@ React.useEffect(() => {
     }
   };
 
+  const buildVideoOverlayPayload = () => {
+    const photos = [];
+    const getUri = value => (typeof value === 'string' ? value : value?.uri);
+    const getResizeMode = uri => (
+      typeof uri === 'string' && uri.includes('bg_removed') ? 'contain' : 'cover'
+    );
+
+    const staticPhotoUri = getUri(photo1Uri);
+    if (staticPhotoUri && staticPhotoUri !== 'default_profile_image') {
+      const size = Math.round(photo1Size);
+      photos.push({
+        uri: staticPhotoUri,
+        x: Math.round(typeof pan1X?.value === 'number' ? pan1X.value : 0),
+        y: Math.round(typeof pan1Y?.value === 'number' ? pan1Y.value : 0),
+        width: size,
+        height: size,
+        shape,
+        borderRadius: shape === 'circle' ? size / 2 : 8,
+        resizeMode: getResizeMode(staticPhotoUri),
+        rotation: 0,
+      });
+    }
+
+    if (Array.isArray(photoElements)) {
+      for (const element of photoElements) {
+        const uri = getUri(element?.uri);
+        if (!uri || uri === 'default_profile_image') continue;
+        const size = Math.round(element.size || 0);
+        const elementShape = element.shape || 'square';
+        photos.push({
+          uri,
+          x: Math.round(element.x || 0),
+          y: Math.round(element.y || 0),
+          width: size,
+          height: size,
+          shape: elementShape,
+          borderRadius: elementShape === 'circle' ? size / 2 : 8,
+          resizeMode: getResizeMode(uri),
+          rotation: element.rotation || 0,
+        });
+      }
+    }
+
+    const texts = Array.isArray(textElements) ? textElements.map(element => ({
+      text: String(element.text || ''),
+      x: Math.round(element.x || 0),
+      y: Math.round(element.y || 0),
+      width: Math.round(element.width || 120),
+      height: Math.round(element.height || 40),
+      fontSize: element.fontSize || 18,
+      color: element.color || '#FFFFFF',
+      fontWeight: element.fontWeight || 'normal',
+      fontFamily: element.fontFamily || null,
+      textAlign: element.textAlign || 'center',
+      backgroundColor: element.backgroundColor || 'transparent',
+      rotation: textRotations[element.id] || element.rotation || 0,
+    })) : [];
+
+    return {
+      photos,
+      texts,
+      effectiveBannerUri: bannerEnabled && bannerUri ? bannerUri : null,
+    };
+  };
+
   // Save template function
   const saveTemplate = async () => {
     // Check guest mode
+    await logAuthState('download:HeroScreen.saveTemplate');
     const isGuest = await AsyncStorage.getItem('GUEST_MODE');
+    logGateDecision(
+      'download:HeroScreen.saveTemplate',
+      isGuest === 'true',
+      `GUEST_MODE=${isGuest} (this gate checks GUEST_MODE only, never the token)`,
+    );
     if (isGuest === 'true') {
       Alert.alert(
         'Sign In Required',
@@ -3374,39 +3459,7 @@ React.useEffect(() => {
       // If it's a video, composite overlays with FFmpeg then save
       if (isVideo && videoUrl) {
         try {
-          // Build overlays from current state
-          const photos = [];
-          // Static photo 1
-          if (photo1Uri && photo1Uri !== 'default_profile_image') {
-            const x = Math.round(typeof pan1X?.value === 'number' ? pan1X.value : 0);
-            const y = Math.round(typeof pan1Y?.value === 'number' ? pan1Y.value : 0);
-            photos.push({ uri: photo1Uri, x, y, width: Math.round(photo1Size), height: Math.round(photo1Size) });
-          }
-          // Dynamic photos
-          if (Array.isArray(photoElements) && photoElements.length > 0) {
-            photoElements.forEach(el => {
-              const uri = el?.uri;
-              if (!uri || uri === 'default_profile_image') return;
-              photos.push({ uri, x: Math.round(el.x || 0), y: Math.round(el.y || 0), width: Math.round(el.size || 0), height: Math.round(el.size || 0) });
-            });
-          }
-
-          // Text overlays - send original screen coordinates, server will scale
-          const texts = Array.isArray(textElements) ? textElements.map(t => ({
-            text: String(t.text || ''),
-            x: Math.round(t.x || 0),
-            y: Math.round(t.y || 0),
-            width: Math.round(t.width || 120),
-            height: Math.round(t.height || 40),
-            fontSize: t.fontSize || 18,
-            color: t.color || '#FFFFFF',
-            fontWeight: t.fontWeight || 'normal',
-            fontFamily: t.fontFamily || null,
-            textAlign: t.textAlign || 'center',
-            backgroundColor: t.backgroundColor || 'transparent'
-          })) : [];
-
-          const effectiveBannerUri = bannerEnabled && bannerUri ? bannerUri : null;
+          const { photos, texts, effectiveBannerUri } = buildVideoOverlayPayload();
 
           const hasOverlays = (photos && photos.length) || (texts && texts.length) || !!effectiveBannerUri;
 
@@ -3539,7 +3592,13 @@ React.useEffect(() => {
   // Share template function
   const shareTemplate = async () => {
     // Check guest mode
+    await logAuthState('share:HeroScreen.shareTemplate');
     const isGuest = await AsyncStorage.getItem('GUEST_MODE');
+    logGateDecision(
+      'share:HeroScreen.shareTemplate',
+      isGuest === 'true',
+      `GUEST_MODE=${isGuest} (this gate checks GUEST_MODE only, never the token)`,
+    );
     if (isGuest === 'true') {
       Alert.alert(
         'Sign In Required',
@@ -3578,35 +3637,7 @@ React.useEffect(() => {
       // If it's a video, composite overlays with FFmpeg then share
       if (isVideo && videoUrl) {
         try {
-          // Build overlays
-          const photos = [];
-          if (photo1Uri && photo1Uri !== 'default_profile_image') {
-            const x = Math.round(typeof pan1X?.value === 'number' ? pan1X.value : 0);
-            const y = Math.round(typeof pan1Y?.value === 'number' ? pan1Y.value : 0);
-            photos.push({ uri: photo1Uri, x, y, width: Math.round(photo1Size), height: Math.round(photo1Size) });
-          }
-          if (Array.isArray(photoElements) && photoElements.length > 0) {
-            photoElements.forEach(el => {
-              const uri = el?.uri;
-              if (!uri || uri === 'default_profile_image') return;
-              photos.push({ uri, x: Math.round(el.x || 0), y: Math.round(el.y || 0), width: Math.round(el.size || 0), height: Math.round(el.size || 0) });
-            });
-          }
-          // Text overlays - send original screen coordinates, server will scale
-          const texts = Array.isArray(textElements) ? textElements.map(t => ({
-            text: String(t.text || ''),
-            x: Math.round(t.x || 0),
-            y: Math.round(t.y || 0),
-            width: Math.round(t.width || 120),
-            height: Math.round(t.height || 40),
-            fontSize: t.fontSize || 18,
-            color: t.color || '#FFFFFF',
-            fontWeight: t.fontWeight || 'normal',
-            fontFamily: t.fontFamily || null,
-            textAlign: t.textAlign || 'center',
-            backgroundColor: t.backgroundColor || 'transparent'
-          })) : [];
-          const effectiveBannerUri = bannerEnabled && bannerUri ? bannerUri : null;
+          const { photos, texts, effectiveBannerUri } = buildVideoOverlayPayload();
           const hasOverlays = (photos && photos.length) || (texts && texts.length) || !!effectiveBannerUri;
 
           let sharePath;
@@ -5290,6 +5321,15 @@ onHandlerStateChange={({ nativeEvent }) => {
       </View>
     )}
 
+    {isProcessingVideo && (
+      <View style={styles.processingOverlay}>
+        <View style={styles.processingContent}>
+          <Text style={styles.processingTitle}>{videoProcessingStatus || 'Processing video...'}</Text>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      </View>
+    )}
+
     {/* Custom Alert */}
     <CustomAlert
       visible={alertConfig.visible}
@@ -5744,7 +5784,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden', // Clip the image properly
-    backgroundColor: '#FFA500', // Orange background for template container
+    backgroundColor: '#FFFFFF', // White background for template container
     borderRadius: 15,
     position: 'relative',
   },

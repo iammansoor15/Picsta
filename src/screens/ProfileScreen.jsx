@@ -49,6 +49,8 @@ import { clearAllProfilePictures, clearAllProfileData } from '../utils/ProfilePi
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TemplatePreferences from '../services/TemplatePreferences';
 import PaymentService from '../services/PaymentService';
+import { getToken, clearToken } from '../utils/authToken';
+import { logAuthState } from '../utils/authDebug';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -510,16 +512,16 @@ const ProfileScreen = () => {
 
     // If user is not signed in, navigate to sign-in page first
     try {
-      // Check for both possible token keys
-      const token = await AsyncStorage.getItem('authToken') || await AsyncStorage.getItem('AUTH_TOKEN');
+      await logAuthState('ProfileScreen.handleProfileImagePress');
+      const token = await getToken();
       if (!token) {
-        console.log('🔐 No auth token found. Redirecting to ProfileEntry (Sign In)');
-        navigation.navigate('ProfileEntry');
+        console.log('🔐 No auth token found. Redirecting to RegisterWithOTP (Sign In)');
+        navigation.navigate('RegisterWithOTP');
         return;
       }
     } catch (e) {
-      console.log('🔐 Error reading auth token, redirecting to ProfileEntry:', e?.message || e);
-      navigation.navigate('ProfileEntry');
+      console.log('🔐 Error reading auth token, redirecting to RegisterWithOTP:', e?.message || e);
+      navigation.navigate('RegisterWithOTP');
       return;
     }
     
@@ -1023,12 +1025,9 @@ const ProfileScreen = () => {
             try {
               // 1) Clear auth token so app treats user as logged out everywhere
               try {
-                // Clear both old and new auth token keys
-                await AsyncStorage.removeItem('AUTH_TOKEN'); // Legacy
-                await AsyncStorage.removeItem('AUTH_USER'); // Legacy
-                await AsyncStorage.removeItem('authToken'); // OTP registration
-                await AsyncStorage.removeItem('user'); // OTP registration
-                await AsyncStorage.removeItem('tempAuthToken'); // Temp token from OTP check
+                // Clears every token/user key plus GUEST_MODE in one place.
+                await clearToken();
+                await logAuthState('logout AFTER clearToken');
                 console.log('🔐 All auth tokens and user data removed');
               } catch (tokenErr) {
                 console.warn('Could not remove auth storage:', tokenErr?.message || tokenErr);

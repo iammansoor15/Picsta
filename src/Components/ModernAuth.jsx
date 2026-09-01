@@ -17,8 +17,7 @@ import {
 import AuthService from '../services/AuthService';
 import SubscriptionService from '../services/SubscriptionService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const TOKEN_KEY = 'AUTH_TOKEN';
+import { setToken } from '../utils/authToken';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function ModernAuth({ navigation }) {
@@ -133,9 +132,7 @@ export default function ModernAuth({ navigation }) {
       if (mode === 'register') {
         const payload = inferPayload(identifier, { name, password });
         const data = await AuthService.register(payload);
-        await AsyncStorage.setItem(TOKEN_KEY, data.token);
-        await AsyncStorage.setItem('authToken', data.token);
-        await AsyncStorage.setItem('AUTH_USER', JSON.stringify(data.user || {}));
+        await setToken(data.token, data.user || {});
 
         // Check subscription status
         const subscription = await SubscriptionService.checkSubscriptionStatus();
@@ -156,9 +153,7 @@ export default function ModernAuth({ navigation }) {
       } else {
         const payload = inferPayload(identifier, { password });
         const data = await AuthService.login(payload);
-        await AsyncStorage.setItem(TOKEN_KEY, data.token);
-        await AsyncStorage.setItem('authToken', data.token);
-        await AsyncStorage.setItem('AUTH_USER', JSON.stringify(data.user || {}));
+        await setToken(data.token, data.user || {});
 
         // Check subscription status
         const subscription = await SubscriptionService.checkSubscriptionStatus();

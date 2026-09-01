@@ -550,6 +550,7 @@ const DraggableText = ({
           {
             width: containerDimensions.width,
             height: containerDimensions.height,
+            backgroundColor: textElement.backgroundColor || 'transparent',
             transform: [{ rotate: `${textElement.rotation || 0}deg` }],
           },
         ]}

@@ -1,93 +1,256 @@
+import { NativeModules } from 'react-native';
 import RNFS from 'react-native-fs';
 import AppConfig from '../config/AppConfig';
+import { computeContainTransform, mapOverlaysToVideo, mapOverlayToVideo } from '../utils/overlayGeometry';
 
 /**
  * Video Composite Service
- * Processes video with overlays using backend FFmpeg service.
+ *
+ * Composites a template video with the user's photo/text/banner overlays for save/share.
+ *
+ * Two implementations, selected by AppConfig.VIDEO_RENDERING.USE_CLIENT_SIDE:
+ *  - compositeVideoOnServer: uploads overlays + delegates the whole render to the backend
+ *    (FFmpeg). This is the original, proven implementation - untouched.
+ *  - compositeVideoOnDevice: renders entirely on-device via a native module
+ *    (NativeModules.VideoComposer - Media3 Transformer on Android, AVFoundation on iOS).
+ *    No upload/download round-trip, preserves audio, avoids server load.
+ *
+ * compositeVideo() is the single public entry point HeroScreen calls; it picks the
+ * implementation and (optionally) falls back to the server path if the on-device path
+ * throws, so flipping the flag on can never turn into a hard failure for users.
  */
 class VideoCompositeService {
   /**
-   * Record video with overlays by capturing frames
-   * @param {Object} options - Recording options
-   * @param {Function} options.captureCallback - ViewShot capture function
-   * @param {Function} options.getVideoRef - Function to get video player ref
-   * @param {number} options.videoDuration - Video duration in seconds
-   * @param {number} options.fps - Frames per second to capture (default: 10)
-   * @returns {Promise<Array>} Array of captured frame paths
+   * Composite video with overlays. Picks client-side or server-side rendering based on
+   * AppConfig.VIDEO_RENDERING, with an automatic fallback to the server path if the
+   * on-device render fails and FALLBACK_TO_SERVER is enabled.
    */
-  async recordVideoFrames(options) {
-    const { 
-      captureCallback, 
-      getVideoRef, 
-      videoDuration = 5,
-      fps = 10 
-    } = options;
+  async compositeVideo(options) {
+    const useClientSide = AppConfig?.VIDEO_RENDERING?.USE_CLIENT_SIDE === true;
+    const fallbackToServer = AppConfig?.VIDEO_RENDERING?.FALLBACK_TO_SERVER !== false;
 
-    console.log('🎬 Recording video with overlays...', { duration: videoDuration, fps });
+    if (!useClientSide) {
+      return this.compositeVideoOnServer(options);
+    }
 
     try {
-      if (!captureCallback) {
-        throw new Error('Capture callback not provided');
-      }
-
-      if (!getVideoRef || !getVideoRef()) {
-        throw new Error('Video ref not available');
-      }
-
-      const videoRef = getVideoRef();
-      const framePaths = [];
-      const frameInterval = 1000 / fps; // milliseconds between frames
-      const totalFrames = Math.ceil(videoDuration * fps);
-
-      console.log(`🎬 Will capture ${totalFrames} frames at ${fps} fps`);
-
-      // Seek to start and play
-      videoRef.seek(0);
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Capture frames while video plays
-      for (let i = 0; i < totalFrames; i++) {
-        const currentTime = i / fps;
-        
-        // Seek to exact frame
-        videoRef.seek(currentTime);
-        await new Promise(resolve => setTimeout(resolve, 100)); // Wait for seek
-
-        // Capture this frame
-        const framePath = await captureCallback();
-        framePaths.push(framePath);
-        
-        console.log(`📸 Captured frame ${i + 1}/${totalFrames} at ${currentTime.toFixed(2)}s`);
-      }
-
-      console.log(`✅ Recorded ${framePaths.length} frames`);
-      return framePaths;
-
+      return await this.compositeVideoOnDevice(options);
     } catch (error) {
-      console.error('❌ Video recording error:', error);
-      throw error;
+      console.error('❌ On-device video composite failed:', error.message);
+      if (!fallbackToServer) {
+        throw error;
+      }
+      console.warn('⚠️ Falling back to server-side video composite...');
+      return this.compositeVideoOnServer(options);
     }
   }
 
+  // ==========================================================================
+  // On-device rendering (native module: Media3 Transformer / AVFoundation)
+  // ==========================================================================
+
   /**
-   * Stitch captured frames into a video
-   * NOTE: This requires FFmpeg or a video encoding library.
-   * For now, this returns the frame paths and shows instructions.
+   * Composite video with overlays entirely on-device, using the native VideoComposer
+   * module. No photos/banner/video leave the device.
    */
-  async stitchFramesToVideo(framePaths, outputPath, fps = 10) {
-    console.warn('⚠️ Video stitching requires FFmpeg or similar tool.');
-    console.log('Frame paths saved for manual stitching:', framePaths);
-    
-    // Save frame paths to a file for reference
-    const frameListPath = `${RNFS.DocumentDirectoryPath}/frames_${Date.now()}.json`;
-    await RNFS.writeFile(frameListPath, JSON.stringify(framePaths, null, 2));
-    
-    throw new Error(
-      'Video stitching not yet implemented. ' +
-      `${framePaths.length} frames captured and saved. ` +
-      'Frame list saved at: ' + frameListPath
+  async compositeVideoOnDevice(options) {
+    const startTime = Date.now();
+    const requestId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+    const {
+      videoUrl,
+      localVideoUri = null, // optional: caller-provided local cache of videoUrl, skips the download
+      photos = [],
+      texts = [],
+      bannerUri = null,
+      bannerX = 0,
+      bannerY = 0,
+      bannerWidth = null,
+      bannerHeight = null,
+      containerWidth,
+      containerHeight,
+    } = options;
+
+    console.log('\n' + '='.repeat(60));
+    console.log(`🎬 [${requestId}] ON-DEVICE VIDEO COMPOSITE REQUEST`);
+    console.log('='.repeat(60));
+
+    const VideoComposer = this.getNativeVideoComposer();
+
+    // 1. Resolve the source video to a local file.
+    const localVideoPath = localVideoUri
+      ? this.stripFileScheme(localVideoUri)
+      : await this.downloadToLocalFile(videoUrl, `source_${requestId}.mp4`);
+
+    // 2. Probe the video's real pixel dimensions - overlay math must target these, not
+    //    the container's CSS/layout size (see overlayGeometry.js).
+    const {
+      width: videoWidth,
+      height: videoHeight,
+      rotation: videoRotation = 0,
+    } = await VideoComposer.getVideoInfo(localVideoPath);
+    console.log(
+      `   Video: ${videoWidth}x${videoHeight}, rotation=${videoRotation}, ` +
+      `Container: ${containerWidth}x${containerHeight}`
     );
+
+    const transform = computeContainTransform(containerWidth, containerHeight, videoWidth, videoHeight);
+
+    // 3. Map every overlay from container space into video-pixel space, and make sure
+    //    every overlay image is a local file (download any remote ones - local photos
+    //    picked from the device already are).
+    const mappedPhotos = [];
+    for (const photo of photos) {
+      const localUri = await this.ensureLocalFile(photo.uri, `photo_${requestId}_${mappedPhotos.length}`);
+      mappedPhotos.push(mapOverlayToVideo({ ...photo, uri: localUri }, transform));
+    }
+
+    const mappedTexts = mapOverlaysToVideo(texts, transform);
+
+    let mappedBanner = null;
+    if (bannerUri) {
+      const localBannerUri = await this.ensureLocalFile(bannerUri, `banner_${requestId}`);
+      mappedBanner = mapOverlayToVideo(
+        {
+          uri: localBannerUri,
+          x: bannerX,
+          y: bannerY,
+          width: bannerWidth || containerWidth,
+          height: bannerHeight || containerWidth / 5,
+        },
+        transform
+      );
+    }
+
+    // 4. Render.
+    const outputPath = `${RNFS.DocumentDirectoryPath}/composite_device_${Date.now()}.mp4`;
+
+    console.log(`🎬 [${requestId}] Compositing on-device...`);
+    console.log(`   Photos: ${mappedPhotos.length}, Texts: ${mappedTexts.length}, Banner: ${mappedBanner ? 'yes' : 'no'}`);
+    console.log('   Photo overlays:', mappedPhotos.map(({ uri, x, y, width, height, shape, resizeMode }) => ({
+      uri,
+      x,
+      y,
+      width,
+      height,
+      shape,
+      resizeMode,
+    })));
+    console.log('   Text overlays:', mappedTexts.map(({ text, x, y, width, height, fontSize, textAlign, backgroundColor }) => ({
+      text,
+      x,
+      y,
+      width,
+      height,
+      fontSize,
+      textAlign,
+      backgroundColor,
+    })));
+
+    const renderStart = Date.now();
+    await VideoComposer.composite({
+      inputPath: localVideoPath,
+      outputPath,
+      width: videoWidth,
+      height: videoHeight,
+      photos: mappedPhotos.map(p => ({
+        path: p.uri,
+        x: p.x,
+        y: p.y,
+        width: p.width,
+        height: p.height,
+        shape: p.shape || 'square',
+        borderRadius: p.borderRadius || 0,
+        resizeMode: p.resizeMode || 'cover',
+        rotation: p.rotation || 0,
+      })),
+      texts: mappedTexts.map(t => ({
+        text: t.text,
+        x: t.x,
+        y: t.y,
+        width: t.width,
+        height: t.height,
+        fontSize: t.fontSize,
+        color: t.color || '#000000',
+        fontWeight: t.fontWeight || 'normal',
+        fontFamily: t.fontFamily || null,
+        backgroundColor: t.backgroundColor || 'transparent',
+        textAlign: t.textAlign || 'center',
+        rotation: t.rotation || 0,
+      })),
+      banner: mappedBanner
+        ? {
+            path: mappedBanner.uri,
+            x: mappedBanner.x,
+            y: mappedBanner.y,
+            width: mappedBanner.width,
+            height: mappedBanner.height,
+            resizeMode: 'cover',
+          }
+        : null,
+    });
+
+    const renderTime = Date.now() - renderStart;
+    const totalTime = Date.now() - startTime;
+    console.log(`✅ [${requestId}] On-device render complete in ${renderTime}ms (total ${totalTime}ms)`);
+    console.log(`   Output: ${outputPath}`);
+    console.log('='.repeat(60) + '\n');
+
+    return outputPath;
   }
+
+  /** Looks up the native module, with a clear error if it isn't linked yet. */
+  getNativeVideoComposer() {
+    const VideoComposer = NativeModules.VideoComposer;
+    if (!VideoComposer) {
+      throw new Error(
+        'Native VideoComposer module not found. It must be added natively ' +
+        '(Android: Media3 Transformer, iOS: AVFoundation) before USE_CLIENT_SIDE can be enabled.'
+      );
+    }
+    return VideoComposer;
+  }
+
+  /** Strips a leading file:// scheme - native filesystem APIs expect a plain path. */
+  stripFileScheme(uri) {
+    return typeof uri === 'string' ? uri.replace(/^file:\/\//, '') : uri;
+  }
+
+  /** Downloads a remote URL to a local temp file and returns the plain filesystem path. */
+  async downloadToLocalFile(url, filename) {
+    const toFile = `${RNFS.CachesDirectoryPath}/${filename}`;
+    const result = await RNFS.downloadFile({ fromUrl: url, toFile }).promise;
+    if (result.statusCode !== 200) {
+      throw new Error(`Failed to download ${url}: HTTP ${result.statusCode}`);
+    }
+    return toFile;
+  }
+
+  /**
+   * Ensures a URI points to a local file, downloading it first if it's remote.
+   * Local file:// URIs just get their scheme stripped.
+   */
+  async ensureLocalFile(uri, filenameIfRemote) {
+    if (!uri) return uri;
+    if (uri.startsWith('http://') || uri.startsWith('https://')) {
+      const ext = uri.split('.').pop().split('?')[0].toLowerCase();
+      const safeExt = ['jpg', 'jpeg', 'png', 'webp'].includes(ext) ? ext : 'jpg';
+      return this.downloadToLocalFile(uri, `${filenameIfRemote}.${safeExt}`);
+    }
+    if (uri.startsWith('content://')) {
+      return uri;
+    }
+    const localPath = this.stripFileScheme(uri);
+    const exists = await RNFS.exists(localPath);
+    if (!exists) {
+      throw new Error(`Overlay image does not exist or is unreadable: ${uri}`);
+    }
+    return localPath;
+  }
+
+  // ==========================================================================
+  // Server-side rendering (existing FFmpeg backend) - unchanged behavior
+  // ==========================================================================
 
   /**
    * Upload a local photo to backend and get URL
@@ -96,19 +259,19 @@ class VideoCompositeService {
     try {
       const backendUrl = this.getBackendUrl();
       const uploadEndpoint = `${backendUrl}/api/videos/upload-photo`;
-      
+
       // Clean file:// prefix
       const filePath = photoUri.replace(/^file:\/\//, '');
-      
+
       console.log(`   📷 Uploading photo: ${filePath.substring(0, 50)}...`);
-      
+
       // Read file as base64
       const base64Data = await RNFS.readFile(filePath, 'base64');
-      
+
       // Determine file extension
       const ext = filePath.split('.').pop().toLowerCase() || 'jpg';
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-      
+
       // Upload to backend
       const response = await fetch(uploadEndpoint, {
         method: 'POST',
@@ -121,11 +284,11 @@ class VideoCompositeService {
           requestId
         })
       });
-      
+
       if (!response.ok) {
         throw new Error(`Upload failed: ${response.status}`);
       }
-      
+
       const result = await response.json();
       console.log(`   ✅ Photo uploaded: ${result.url?.substring(0, 50)}...`);
       return result.url;
@@ -138,7 +301,7 @@ class VideoCompositeService {
   /**
    * Composite video with overlays using backend processing
    */
-  async compositeVideo(options) {
+  async compositeVideoOnServer(options) {
     const startTime = Date.now();
     const requestId = `app_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
@@ -173,26 +336,26 @@ class VideoCompositeService {
         for (let i = 0; i < photos.length; i++) {
           const photo = photos[i];
           let photoUrl = photo.uri;
-          
+
           // If it's a local file://, upload it first
           if (photoUrl && photoUrl.startsWith('file://')) {
             photoUrl = await this.uploadPhotoToBackend(photoUrl, requestId);
           }
-          
+
           processedPhotos.push({
             ...photo,
             uri: photoUrl
           });
         }
       }
-      
+
       // Upload banner if it's local
       let processedBannerUri = bannerUri;
       if (bannerUri && bannerUri.startsWith('file://')) {
         console.log(`\n🏳️ [${requestId}] Uploading banner to backend...`);
         processedBannerUri = await this.uploadPhotoToBackend(bannerUri, requestId);
       }
-      
+
       // Send request to backend for video processing
       const backendUrl = this.getBackendUrl();
       const endpoint = `${backendUrl}/api/videos/composite`;
@@ -201,7 +364,7 @@ class VideoCompositeService {
       console.log(`   Endpoint: ${endpoint}`);
 
       const fetchStart = Date.now();
-      
+
       const payload = {
         videoUrl,
         overlays: {
@@ -233,7 +396,7 @@ class VideoCompositeService {
           height: Math.round(containerHeight)
         }
       };
-      
+
       console.log(`   Payload size: ${JSON.stringify(payload).length} bytes`);
 
       const response = await fetch(endpoint, {
@@ -284,13 +447,13 @@ class VideoCompositeService {
 
       const downloadTime = Date.now() - downloadStart;
       const totalTime = Date.now() - startTime;
-      
+
       console.log(`✅ [${requestId}] Video downloaded in ${downloadTime}ms`);
       console.log(`\n🎉 [${requestId}] VIDEO COMPOSITE SUCCESS`);
       console.log(`   Total time: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
       console.log(`   Output: ${outputPath}`);
       console.log('='.repeat(60) + '\n');
-      
+
       return outputPath;
 
     } catch (error) {
@@ -299,7 +462,7 @@ class VideoCompositeService {
       console.error(`   Error: ${error.message}`);
       console.error(`   Stack:`, error.stack);
       console.log('='.repeat(60) + '\n');
-      
+
       // If backend fails, show helpful error
       if (error.message.includes('Backend') || error.message.includes('fetch')) {
         throw new Error(
@@ -307,7 +470,7 @@ class VideoCompositeService {
           'Please contact support or try again later.'
         );
       }
-      
+
       throw error;
     }
   }
@@ -318,34 +481,18 @@ class VideoCompositeService {
   getBackendUrl() {
     const devUrl = AppConfig?.DEVELOPMENT?.DEV_SERVER_URL;
     const prodUrl = AppConfig?.PRODUCTION_SERVER_URL;
-    
+
     // Try dev first, then prod
     if (devUrl && devUrl.trim()) {
       return devUrl.replace(/\/$/, '');
     }
-    
+
     if (prodUrl && prodUrl.trim()) {
       return prodUrl.replace(/\/$/, '');
     }
-    
+
     // Fallback
     return 'http://10.0.2.2:10000'; // Android emulator
-  }
-
-  /**
-   * Get video information using FFprobe
-   * STUB: Returns placeholder info since FFmpeg is not available
-   * @param {string} videoPath - Path to video file
-   * @returns {Promise<Object>} Video information
-   */
-  async getVideoInfo(videoPath) {
-    console.warn('⚠️ getVideoInfo is a stub (FFmpeg not available)');
-    return {
-      duration: 'unknown',
-      width: null,
-      height: null,
-      output: 'FFmpeg not available'
-    };
   }
 }
 

@@ -20,6 +20,8 @@ import { useDispatch } from 'react-redux';
 import { setDisplayName } from '../store/slices/profileSlice';
 import { updateProfileImage } from '../store/slices/profileSlice';
 import { updateAndPersistProfilePicture } from '../store/slices/profilePictureSlice';
+import { logAuthState } from '../utils/authDebug';
+import { setToken } from '../utils/authToken';
 
 const RegisterWithOTP = ({ navigation }) => {
   const dispatch = useDispatch();
@@ -110,10 +112,15 @@ const RegisterWithOTP = ({ navigation }) => {
           name: 'User', // Temporary, won't update existing user
         });
 
-        // Store token
+        await logAuthState('login:otp-signin BEFORE storing token');
+        console.log('[AUTH-DEBUG] sign-in response has token?', !!result.token);
+
+        // Store token under EVERY known key and clear GUEST_MODE.
+        // Previously this wrote only 'authToken', so screens reading 'AUTH_TOKEN'
+        // (CustomHeader) saw a signed-in user as logged out.
         if (result.token) {
-          await AsyncStorage.setItem('authToken', result.token);
-          await AsyncStorage.setItem('user', JSON.stringify(result.user));
+          await setToken(result.token, result.user);
+          await logAuthState('login:otp-signin AFTER storing token');
           
           // IMPORTANT: Load user data into Redux immediately after sign-in
           console.log('🔄 Sign-in: Loading user data into Redux:', result.user);
@@ -188,8 +195,9 @@ const RegisterWithOTP = ({ navigation }) => {
 
       // Now update the profile with the actual name using the /profile endpoint
       if (result.token) {
-        await AsyncStorage.setItem('authToken', result.token);
-        
+        await setToken(result.token);
+        await logAuthState('login:otp-register AFTER storing token');
+
         console.log('🔵 Updating profile with name:', name.trim());
         const profileUpdate = await AuthService.updateProfile(result.token, { name: name.trim() });
         console.log('🔵 Profile updated:', JSON.stringify(profileUpdate, null, 2));
@@ -261,6 +269,7 @@ const RegisterWithOTP = ({ navigation }) => {
 
   // Skip authentication
   const handleSkip = async () => {
+    console.warn("[AUTH-DEBUG] Skip pressed — setting GUEST_MODE='true'. Nothing in the app ever clears this flag.");
     await AsyncStorage.setItem('GUEST_MODE', 'true');
     navigation.reset({
       index: 0,

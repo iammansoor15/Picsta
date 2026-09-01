@@ -11,11 +11,12 @@ class MainActivity : ReactActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    // Prevent screenshots and screen recording
-    window.setFlags(
-      WindowManager.LayoutParams.FLAG_SECURE,
-      WindowManager.LayoutParams.FLAG_SECURE
-    )
+    // Screenshot/recording block (FLAG_SECURE) temporarily disabled for UI debugging.
+    // Re-enable before release:
+    // window.setFlags(
+    //   WindowManager.LayoutParams.FLAG_SECURE,
+    //   WindowManager.LayoutParams.FLAG_SECURE
+    // )
   }
 
   /**

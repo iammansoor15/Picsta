@@ -10,6 +10,8 @@ import {
   Image,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { getToken } from '../utils/authToken';
+import { logAuthState } from '../utils/authDebug';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
 import { getDefaultProfilePicture } from '../constants/defaultProfilePicture';
@@ -57,13 +59,20 @@ const CustomHeader = ({
 
   const handleProfilePress = useCallback(async () => {
     try {
-      const token = await AsyncStorage.getItem('AUTH_TOKEN');
+      await logAuthState('CustomHeader.handleProfilePress');
+      // Read via getToken() - it checks every key the token has ever been stored under.
+      // Reading only 'AUTH_TOKEN' here meant an OTP login (which writes 'authToken')
+      // always looked logged out.
+      const token = await getToken();
+      console.log('[AUTH-DEBUG] CustomHeader token lookup ->', token ? 'found' : 'MISSING');
       if (!token) {
-        navigation.navigate('ProfileEntry');
+        console.warn('[AUTH-DEBUG] CustomHeader: no token, sending to RegisterWithOTP');
+        navigation.navigate('RegisterWithOTP');
         return;
       }
     } catch (e) {
-      navigation.navigate('ProfileEntry');
+      console.warn('[AUTH-DEBUG] CustomHeader token read failed:', e?.message || e);
+      navigation.navigate('RegisterWithOTP');
       return;
     }
     navigation.navigate('ProfileScreen');

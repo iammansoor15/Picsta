@@ -4,8 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthService from '../services/AuthService';
 import TemplatePreferences from '../services/TemplatePreferences';
 import PaymentService from '../services/PaymentService';
-
-const TOKEN_KEY = 'AUTH_TOKEN';
+import { getToken, clearToken } from '../utils/authToken';
 
 export default function ProfileHome({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -22,7 +21,7 @@ export default function ProfileHome({ navigation }) {
   useEffect(() => {
     const init = async () => {
       try {
-        const token = await AsyncStorage.getItem(TOKEN_KEY);
+        const token = await getToken();
         if (!token) {
           navigation.replace('ProfileEntry');
           return;
@@ -49,7 +48,7 @@ export default function ProfileHome({ navigation }) {
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem(TOKEN_KEY);
+      await clearToken();
       Alert.alert('Logged out', 'You have been signed out.');
       // Navigate back to the HeroScreen
       navigation.navigate('HeroScreen');

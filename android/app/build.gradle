@@ -86,6 +86,12 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // On-device video overlay compositing (VideoComposerModule) - replaces the server-side
+    // FFmpeg composite when AppConfig.VIDEO_RENDERING.USE_CLIENT_SIDE is enabled.
+    implementation "androidx.media3:media3-transformer:1.4.1"
+    implementation "androidx.media3:media3-effect:1.4.1"
+    implementation "androidx.media3:media3-common:1.4.1"
 }
 
 // Ensure Kotlin can see generated BuildConfig

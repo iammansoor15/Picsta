@@ -2,15 +2,14 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const TOKEN_KEY = 'AUTH_TOKEN';
+import { getToken } from '../utils/authToken';
 
 export default function Header({ title = 'PICSTAR' }) {
   const navigation = useNavigation();
 
   const onAvatarPress = async () => {
     try {
-      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      const token = await getToken();
       if (!token) {
         // Not logged in: go to sign-in/register screen
         navigation.navigate('ProfileEntry');

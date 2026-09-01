@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, Image, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubscriptionService from '../services/SubscriptionService';
+import { getToken } from '../utils/authToken';
+import { logAuthState } from '../utils/authDebug';
 import Logo from '../../assets/Winter_splash.png';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
 
@@ -29,7 +31,8 @@ const SplashScreen = () => {
     // Check authentication and navigate accordingly
     const timer = setTimeout(async () => {
       try {
-        const authToken = await AsyncStorage.getItem('authToken');
+        await logAuthState('SplashScreen.authCheck');
+        const authToken = await getToken();
         if (authToken) {
           // User is authenticated, check subscription status
           const subscription = await SubscriptionService.checkSubscriptionStatus();

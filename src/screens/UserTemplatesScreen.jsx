@@ -33,6 +33,7 @@ import { COLORS } from '../theme/colors';
 import UserTemplatesService from '../services/UserTemplatesService';
 import backgroundRemovalService from '../services/BackgroundRemovalService';
 import ImagePickerService from '../services/ImagePickerService';
+import { logAuthState, logGateDecision } from '../utils/authDebug';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectProfileImage } from '../store/slices/profileSlice';
 import Feather from 'react-native-vector-icons/Feather';
@@ -862,7 +863,13 @@ const UserTemplatesScreen = ({ navigation }) => {
   // Share template function
   const shareTemplate = async () => {
     // Check guest mode
+    await logAuthState('share:UserTemplatesScreen.shareTemplate');
     const isGuest = await AsyncStorage.getItem('GUEST_MODE');
+    logGateDecision(
+      'share:UserTemplatesScreen.shareTemplate',
+      isGuest === 'true',
+      `GUEST_MODE=${isGuest} (this gate checks GUEST_MODE only, never the token)`,
+    );
     if (isGuest === 'true') {
       Alert.alert(
         'Sign In Required',
@@ -916,7 +923,13 @@ const UserTemplatesScreen = ({ navigation }) => {
   // Download/Save functionality
   const handleDownload = async () => {
     // Check guest mode
+    await logAuthState('download:UserTemplatesScreen.handleDownload');
     const isGuest = await AsyncStorage.getItem('GUEST_MODE');
+    logGateDecision(
+      'download:UserTemplatesScreen.handleDownload',
+      isGuest === 'true',
+      `GUEST_MODE=${isGuest} (this gate checks GUEST_MODE only, never the token)`,
+    );
     if (isGuest === 'true') {
       Alert.alert(
         'Sign In Required',
