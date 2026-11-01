@@ -1,45 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, Platform } from 'react-native';
+import { Alert } from 'react-native';
 import AppConfig from '../config/AppConfig';
 
 // Template service for Cloudinary-based template management
 class CloudinaryTemplateService {
   constructor() {
-    // Prefer local/dev API when developing, with optional production fallback
-    const devServer = AppConfig?.DEVELOPMENT?.DEV_SERVER_URL
-      ? AppConfig.DEVELOPMENT.DEV_SERVER_URL.replace(/\/$/, '')
-      : null;
-
-    const platformDevUrls = Platform.select({
-      android: [
-        // Prefer USB reverse for physical devices with IP address
-        'http://192.168.1.64:10000',
-        'http://127.0.0.1:10000',
-        'http://localhost:10000',
-        // Emulator loopback
-        'http://10.0.2.2:10000'
-      ],
-      ios: [
-        'http://192.168.1.64:10000',
-        'http://127.0.0.1:10000',
-        'http://localhost:10000'
-      ],
-      default: []
-    });
-
-    const candidates = [];
-    const prod = AppConfig?.PRODUCTION_SERVER_URL ? `${AppConfig.PRODUCTION_SERVER_URL.replace(/\/$/, '')}/api/templates` : null;
-    const allowProd = AppConfig?.DEVELOPMENT?.USE_PRODUCTION_FALLBACK === true;
-
-    if (prod && allowProd) candidates.push(prod);
-    if (devServer) candidates.push(`${devServer}/api/templates`);
-    candidates.push(...platformDevUrls.map(u => `${u}/api/templates`));
+    const candidates = [`${AppConfig.BASE_URL}/api/templates`];
     // Note: baseURL points to /api/templates so we can append path routes like /category/:main
 
     // Deduplicate
     this.apiUrls = candidates.filter((u, i) => u && candidates.indexOf(u) === i);
-    this.baseURL = this.apiUrls[0] || prod;
-    this.cachePrefix = '@cloudinary_templates_';
+    this.baseURL = this.apiUrls[0];
+    this.cachePrefix = '@cloudinary_templates_v2_';
     this.cacheTTL = 3600000; // 1 hour in milliseconds
     this.maxRetries = 3;
     this.retryDelay = 1000; // 1 second

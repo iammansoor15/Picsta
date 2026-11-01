@@ -3,11 +3,7 @@
  * Run this to check if the server is properly configured
  */
 
-const TEST_SERVERS = [
-  'http://localhost:10000',
-  'http://192.168.1.46:10000', // Your local network IP
-  'https://picstar-server.onrender.com'
-];
+const TEST_SERVERS = [require('./scripts/app-env.cjs').readAppEnvironment().baseUrl];
 
 async function testEndpoint(baseUrl, endpoint) {
   try {

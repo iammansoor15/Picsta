@@ -1,112 +1,69 @@
-# 🚀 Production APK Configuration
+﻿# Environment configuration
 
-## 📱 **Configure Your Server URL**
+The app and backend read their public origin from environment variables. To use
+the Winter deployment, put this in each project's `.env`:
 
-To build an APK that automatically connects to your deployed server (no user configuration needed):
-
-### **Step 1: Update Server URL**
-
-Edit the file: `app/src/config/AppConfig.js`
-
-```javascript
-const AppConfig = {
-  // 🚀 REPLACE THIS WITH YOUR ACTUAL SERVER URL
-  PRODUCTION_SERVER_URL: 'https://your-actual-server.onrender.com',
-  
-  // ... rest of config
-};
+```env
+BASE_URL=https://winter.codebinary.in
 ```
 
-### **Step 2: Build Production APK**
+For a fresh checkout, copy `.env.example` to `.env`. Actual `.env` files and
+variants are ignored by Git. Each project has its own environment file.
 
-```bash
-# Navigate to app directory
-cd app
+## Mobile app
 
-# Build production APK
-npx react-native run-android --variant=release
-# OR
-cd android && ./gradlew assembleRelease
+`react-native-dotenv` injects `BASE_URL` when Babel builds the app.
+`src/config/AppConfig.js` supplies that URL to the API services, template
+requests, server setup, and JavaScript deep links. Android obtains its link host
+and scheme through the same loader and passes them to the manifest.
+
+Set a valid HTTP(S) origin with no API path, credentials, query, or fragment.
+Trailing slashes are removed. Missing or invalid values stop the build. Endpoint
+paths such as `/api/auth` remain in code.
+
+For local development, set `BASE_URL` to the backend address reachable from the
+device. Server discovery no longer probes hardcoded IPs or localhost addresses.
+The existing ServerConfig UI can still set an explicit session override.
+
+Shell/CI `BASE_URL` values take priority over files. The loader supports the
+package's mode files (`.env.development`, `.env.production`, `.env.local`) and
+`ENVFILE` for selecting another base env file. Use the same env selection for
+Metro and the native build. Android reads development settings for debug builds
+and production settings for release builds.
+
+After changing env values, stop Metro and restart it with:
+
+```sh
+npm start -- --reset-cache
 ```
 
-### **Step 3: Test**
+Rebuild and distribute the app. Installed builds retain their bundled URL.
 
-The APK will automatically connect to your server URL. No user configuration required!
-
-## 🔧 **How It Works**
-
-### **Development Mode (`__DEV__ = true`)**
-- Uses `localhost:3000` for local development
-- Allows manual server configuration (if enabled)
-
-### **Production APK (`__DEV__ = false`)**
-- Automatically uses `AppConfig.PRODUCTION_SERVER_URL`
-- No user configuration needed
-- Direct connection to your deployed server
-
-## 📋 **Example Configurations**
-
-### **Render Deployment**
-```javascript
-PRODUCTION_SERVER_URL: 'https://narayana-app.onrender.com',
+```sh
+npm run verify:config
+npm run test:config
 ```
 
-### **Vercel Deployment**
-```javascript
-PRODUCTION_SERVER_URL: 'https://narayana-app.vercel.app',
+These checks print the configured endpoints and verify that changes to env
+files affect both Babel output and the Android configuration loader.
+
+## Backend and web pages
+
+Set `BASE_URL` in the deployed backend's environment or `.env`, preserving its
+existing credentials and other settings, then restart the Node process.
+`SERVER_URL` is supported as a legacy env alias when `BASE_URL` is absent.
+
+The deletion form and admin pages obtain their API origin from
+`/public-config.js`. It defaults to the server's `BASE_URL` and disables browser
+caching. `PUBLIC_API_BASE_URL` is an optional env override for a separate API
+origin. Include the web origin in `CORS_ORIGIN` when using a restricted list.
+
+DNS, Nginx, and the HTTPS certificate must serve the selected hostname. Proxy the
+full request path to the existing Node port. The deletion page remains:
+
+```text
+https://winter.codebinary.in/winter/account-delete-request
 ```
 
-### **Custom Domain**
-```javascript
-PRODUCTION_SERVER_URL: 'https://api.yourapp.com',
-```
-
-### **Railway Deployment**
-```javascript
-PRODUCTION_SERVER_URL: 'https://narayana-app-production.up.railway.app',
-```
-
-## ✅ **Verification**
-
-### **Test Your Configuration**
-```javascript
-// In your app, you can check which server is being used:
-import backgroundRemovalService from './src/services/BackgroundRemovalService';
-
-console.log('Server URL:', backgroundRemovalService.getConfig());
-```
-
-### **Expected Output:**
-```javascript
-// Development
-{
-  serverUrl: 'http://localhost:3000',
-  isDevelopment: true,
-  // ...
-}
-
-// Production APK
-{
-  serverUrl: 'https://your-server.onrender.com',
-  isDevelopment: false,
-  // ...
-}
-```
-
-## 🎯 **Benefits**
-
-✅ **Zero User Configuration**: Users just install and use  
-✅ **Automatic Connection**: Connects to your server immediately  
-✅ **Development Friendly**: Still works with localhost in development  
-✅ **Easy Updates**: Change server URL in one place  
-✅ **Professional**: No complex setup for end users  
-
-## 🚀 **Ready for Release!**
-
-Once configured, your APK will:
-1. **Install** on user's device
-2. **Automatically connect** to your server
-3. **Work immediately** without any setup
-4. **Process images** using your deployed server
-
-**Perfect for distributing to users!** 🎉
+Changing code or env files locally does not update the deployed server or the
+store's data deletion URL. Update those deployment settings when releasing.

@@ -12,7 +12,7 @@ const base = () => {
   const prodAuth = AppConfig?.PRODUCTION_AUTH_SERVER_URL || AppConfig?.PRODUCTION_SERVER_URL;
   if (prodAuth) return String(prodAuth).replace(/\/$/, '');
 
-  return 'http://localhost:10000';
+  return AppConfig.BASE_URL;
 };
 
 /**

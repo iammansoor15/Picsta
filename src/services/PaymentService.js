@@ -2,6 +2,7 @@ import RazorpayCheckout from 'react-native-razorpay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import backgroundRemovalService from './BackgroundRemovalService';
 import { ENDPOINTS } from '../constants/RoutesAndUrls';
+import AppConfig from '../config/AppConfig';
 
 // Support both old and new token keys
 const TOKEN_KEYS = ['authToken', 'AUTH_TOKEN'];
@@ -11,7 +12,7 @@ const TOKEN_KEYS = ['authToken', 'AUTH_TOKEN'];
  */
 const getBaseUrl = () => {
   const config = backgroundRemovalService.getServerConfig();
-  return config?.baseUrl?.replace(/\/$/, '') || 'http://localhost:10000';
+  return config?.baseUrl?.replace(/\/$/, '') || AppConfig.BASE_URL;
 };
 
 /**

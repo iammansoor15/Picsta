@@ -3,10 +3,7 @@
  * Tests all server endpoints to verify they're working
  */
 
-const BASE_URLS = [
-  'http://localhost:10000',
-  'http://192.168.1.46:10000'
-];
+const BASE_URLS = [require('./scripts/app-env.cjs').readAppEnvironment().baseUrl];
 
 // Test cases for all endpoints
 const ENDPOINTS = {

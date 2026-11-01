@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
+  Linking,
 } from 'react-native';
 import CustomAlert from '../Components/CustomAlert';
 import LinearGradient from 'react-native-linear-gradient';
@@ -23,6 +24,7 @@ import { testProfilePictureState } from '../utils/profilePictureTest';
 import UserAssetsService from '../services/UserAssetsService';
 import NavigationService from '../services/NavigationService';
 import AuthService from '../services/AuthService';
+import AppConfig from '../config/AppConfig';
 import SubscriptionService from '../services/SubscriptionService';
 import ProfilePictureStorageService from '../services/ProfilePictureStorageService';
 import ProfilePhotoService from '../services/ProfilePhotoService';
@@ -1008,6 +1010,21 @@ const ProfileScreen = () => {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    try {
+      await Linking.openURL(
+        `${AppConfig.BASE_URL}/winter/account-delete-request`,
+      );
+    } catch {
+      setAlertConfig({
+        visible: true,
+        title: 'Unable to Open Page',
+        message: 'Unable to open the account deletion page. Please try again.',
+        buttons: [{ text: 'OK' }],
+      });
+    }
+  };
+
   const handleLogout = () => {
     setAlertConfig({
       visible: true,
@@ -1279,6 +1296,15 @@ const ProfileScreen = () => {
           activeOpacity={0.8}
         >
           <Text style={styles.logoutButtonText}>Logout</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleDeleteAccount}
+          activeOpacity={0.8}
+          accessibilityRole="link"
+        >
+          <Text style={styles.logoutButtonText}>Delete Account</Text>
         </TouchableOpacity>
       </ScrollView>
 

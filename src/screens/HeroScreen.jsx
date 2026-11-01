@@ -40,7 +40,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import ViewShot from 'react-native-view-shot';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 import RNShare from 'react-native-share';
-import Video from 'react-native-video';
+import TemplateVideoPlayer from '../Components/TemplateVideoPlayer';
 import { cropResultManager } from '../utils/CropResultManager';
 import ShapeDropdown from '../Components/ShapeDropdown';
 import ShapeDropdownDebug from '../Components/ShapeDropdownDebug';
@@ -51,7 +51,8 @@ import backgroundRemovalService from '../services/BackgroundRemovalService';
 import ImageMetadataService from '../services/ImageMetadataService';
 import ImagePickerService from '../services/ImagePickerService';
 import BackgroundToggleService from '../services/BackgroundToggleService';
-import VideoPrefetchManager from '../services/VideoPrefetchManager';
+import VideoDownloadService from '../services/VideoDownloadService';
+import { isVideoTemplate } from '../utils/videoPlayback';
 // import BackgroundToggleDebugger from '../Components/BackgroundToggleDebugger';
 import TemplatePreferences from '../services/TemplatePreferences';
 import AuthService from '../services/AuthService';
@@ -517,152 +518,18 @@ const DynamicPhotoElement = ({
 
 
 // Separate component for video template items to use hooks properly
-const VideoTemplateItem = ({ item, index, containerWidth, containerHeight, isCurrentVideo, onCached, hideVideoForCapture = false, captureBgColor = 'transparent' }) => {
-  const [videoSource, setVideoSource] = React.useState(null);
-  const [isReady, setIsReady] = React.useState(false);
-  const [isBuffering, setIsBuffering] = React.useState(true);
-  const [canPlay, setCanPlay] = React.useState(false);
-  const videoRef = React.useRef(null);
-  const hasInitialized = React.useRef(false);
-
-  const videoUrl = item?.video_url;
+const VideoTemplateItem = ({ item, containerWidth, containerHeight, isCurrentVideo, hideVideoForCapture = false, captureBgColor = 'transparent' }) => {
   const imageUrl = item?.image_url || item?.url || item?.secure_url;
-  const serialNo = item?.serial_no;
-  const isVideo = item?.resource_type === 'video' ||
-                  (videoUrl && (videoUrl.endsWith('.mp4') || videoUrl.endsWith('.mov') ||
-                   videoUrl.endsWith('.avi') || videoUrl.includes('/video/upload/')));
-
-  // Initialize video source from cache or stream
-  React.useEffect(() => {
-    if (!isVideo || !videoUrl || hasInitialized.current) return;
-
-    const initializeVideo = async () => {
-      try {
-        hasInitialized.current = true;
-
-        // Check if already cached via VideoPrefetchManager
-        const cachedUri = await VideoPrefetchManager.getCachedUri(videoUrl, serialNo, index);
-
-        if (cachedUri) {
-          console.log(`✅ Using cached video at index ${index}`);
-          setVideoSource(cachedUri);
-          try { onCached && onCached(cachedUri); } catch (_) {}
-        } else {
-          console.log(`🌐 Streaming video at index ${index}`);
-          setVideoSource(videoUrl);
-        }
-
-        setIsReady(true);
-      } catch (error) {
-        console.error(`❌ Video initialization error at index ${index}:`, error);
-        // Fallback to streaming
-        setVideoSource(videoUrl);
-        setIsReady(true);
-      }
-    };
-
-    initializeVideo();
-  }, [isVideo, videoUrl, index, serialNo]);
-
-  // When video becomes current and is ready, seek to start
-  React.useEffect(() => {
-    if (isCurrentVideo && isReady && videoRef.current) {
-      videoRef.current.seek(0);
-      console.log(`🔄 Restarting video at index ${index}`);
-    }
-  }, [isCurrentVideo, isReady, index]);
-
-  // For images, mark as ready immediately; for videos, allow initial play
-  React.useEffect(() => {
-    if (!isVideo) {
-      setIsReady(true);
-    } else if (videoSource) {
-      // Allow video to start playing once source is available
-      setCanPlay(true);
-      setIsBuffering(false);
-    }
-  }, [isVideo, videoSource]);
-  
-  // Only show buffering on initial load, not during scroll transitions
-  const showBuffering = false; // Disabled for smooth scroll experience
-
   return (
-    // Letterbar fill: a non-9:16 source is now shown whole (resizeMode/object-fit "contain"
-    // below) instead of cropped to fill, so this background shows through on the short axis -
-    // matching how a screenshot of a square/portrait post looks in a phone gallery viewer.
     <View style={{ width: containerWidth, height: containerHeight, backgroundColor: captureBgColor || COLORS.black }}>
-      {isVideo ? (
-        <>
-          {videoSource && !hideVideoForCapture ? (
-            <Video
-              ref={videoRef}
-              source={{ uri: videoSource }}
-              style={{ width: '100%', height: '100%' }}
-              resizeMode="contain"
-              repeat={true}
-              muted={!isCurrentVideo}
-              volume={isCurrentVideo ? 1.0 : 0}
-              paused={!isCurrentVideo}
-              controls={false}
-              ignoreSilentSwitch="ignore"
-              posterResizeMode="contain"
-              poster={imageUrl}
-              bufferConfig={{
-                minBufferMs: 3000,  // Optimized for instant playback
-                maxBufferMs: 20000,  // Reduced for faster startup
-                bufferForPlaybackMs: 500,  // Minimal buffer for instant start
-                bufferForPlaybackAfterRebufferMs: 2000
-              }}
-              maxBitRate={2000000}
-              progressUpdateInterval={250}
-              onLoad={(data) => {
-                console.log(`✅ Video loaded at index ${index}, duration: ${data.duration}s`);
-                setIsReady(true);
-                setCanPlay(true);
-                setIsBuffering(false);
-              }}
-              onBuffer={({ isBuffering: buffering }) => {
-                // Only log buffering, don't show UI
-                if (buffering) {
-                  console.log(`📊 Video buffering at index ${index}`);
-                } else {
-                  console.log(`✅ Video ready at index ${index}`);
-                  setCanPlay(true);
-                }
-              }}
-              onReadyForDisplay={() => {
-                console.log(`✅ Video ready for display at index ${index}`);
-                setIsReady(true);
-                setCanPlay(true);
-                setIsBuffering(false);
-              }}
-              onError={(error) => {
-                console.error(`❌ Video playback error at index ${index}:`, error);
-              }}
-            />
-          ) : null}
-
-          {/* No buffering indicator for smooth scroll experience */}
-        </>
+      {isVideoTemplate(item) ? (
+        !hideVideoForCapture && <TemplateVideoPlayer template={item} active={isCurrentVideo} />
       ) : (
-        <View style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
-          <Image
-            source={{ uri: imageUrl }}
-            style={{ width: '100%', height: '100%' }}
-            resizeMode="contain"
-            onLoad={() => {
-              console.log(`✅ Image loaded at index ${index}, serial: ${item?.serial_no}`);
-            }}
-            onError={(e) => {
-              console.error(`❌ Image load error at index ${index}:`, e?.nativeEvent?.error);
-            }}
-          />
-        </View>
+        <Image source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
       )}
     </View>
   );
 };
-
 const HeroScreen = ({ route, navigation }) => {
   // Safe area insets to avoid overlapping the status bar (especially on notch devices)
   const insets = useSafeAreaInsets();
@@ -1274,69 +1141,6 @@ const HeroScreen = ({ route, navigation }) => {
     };
   }, []);
 
-  // Video prefetching hook - prefetch videos around current index for smooth scrolling
-  React.useEffect(() => {
-    if (!reelsTemplates || reelsTemplates.length === 0) return;
-
-    const prefetchVideos = async () => {
-      const PREFETCH_RANGE = 4; // Prefetch 4 videos ahead and 4 behind (±4)
-      const startIndex = Math.max(0, currentReelIndex - PREFETCH_RANGE);
-      const endIndex = Math.min(reelsTemplates.length - 1, currentReelIndex + PREFETCH_RANGE);
-
-      console.log(`🎬 Prefetching videos: range [${startIndex}-${endIndex}], current: ${currentReelIndex}`);
-
-      // Prefetch videos in order of priority (current -> adjacent -> further)
-      const prefetchOrder = [];
-
-      // Add current video first
-      prefetchOrder.push(currentReelIndex);
-
-      // Add videos in expanding circles around current
-      for (let distance = 1; distance <= PREFETCH_RANGE; distance++) {
-        if (currentReelIndex + distance <= endIndex) {
-          prefetchOrder.push(currentReelIndex + distance);
-        }
-        if (currentReelIndex - distance >= startIndex) {
-          prefetchOrder.push(currentReelIndex - distance);
-        }
-      }
-
-      // Prefetch each video
-      for (const index of prefetchOrder) {
-        const item = reelsTemplates[index];
-        if (!item) continue;
-
-        const videoUrl = item?.video_url;
-        const isVideo = item?.resource_type === 'video' ||
-                        (videoUrl && (videoUrl.endsWith('.mp4') || videoUrl.endsWith('.mov') ||
-                         videoUrl.endsWith('.avi') || videoUrl.includes('/video/upload/')));
-
-        if (isVideo && videoUrl) {
-          // Check if already cached or downloading
-          const isCached = await VideoPrefetchManager.isCached(videoUrl, item?.serial_no, index);
-          const isDownloading = VideoPrefetchManager.isDownloading(videoUrl);
-
-          if (!isCached && !isDownloading) {
-            // Calculate priority: higher for videos closer to current
-            const distance = Math.abs(index - currentReelIndex);
-            const priority = PREFETCH_RANGE - distance;
-
-            console.log(`📥 Initiating prefetch: index ${index}, serial ${item?.serial_no}, priority ${priority}`);
-
-            // Fire and forget - don't await
-            VideoPrefetchManager.prefetchVideo(videoUrl, item?.serial_no, index, priority)
-              .catch(error => {
-                console.error(`❌ Prefetch failed for index ${index}:`, error.message);
-              });
-          }
-        }
-      }
-    };
-
-    // Trigger prefetch
-    prefetchVideos();
-  }, [currentReelIndex, reelsTemplates]);
-
   // Resolve the user name purely from Redux so it reacts instantly to ProfileScreen updates
   const resolveAndApplyUserName = React.useCallback(() => {
     try {
@@ -1536,15 +1340,7 @@ const HeroScreen = ({ route, navigation }) => {
 
   // Fetch a template document by category and serial number (no pagination; load all then pick by serial)
   const fetchDocBySerial = React.useCallback(async (category, serialNo) => {
-    const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)));
-    const allowProd = (AppConfig?.DEVELOPMENT?.USE_PRODUCTION_FALLBACK === true) || (typeof __DEV__ !== 'boolean' || __DEV__ === false);
-    const candidates = uniq([
-      AppConfig?.DEVELOPMENT?.DEV_SERVER_URL,
-      'http://10.0.2.2:10000',
-      'http://127.0.0.1:10000',
-      'http://localhost:10000',
-      allowProd ? AppConfig?.PRODUCTION_SERVER_URL : null,
-    ]).map(u => u && u.replace(/\/$/, ''));
+    const candidates = [AppConfig.BASE_URL];
 
     // Preferred: fetch all templates for category without limit and select by serial
     for (const baseURL of candidates) {
@@ -1608,15 +1404,7 @@ const HeroScreen = ({ route, navigation }) => {
 
   // Fetch all templates for a category (no limit); return list for serial navigation
   const fetchCategoryTemplatesList = React.useCallback(async (category) => {
-    const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)));
-    const allowProd = (AppConfig?.DEVELOPMENT?.USE_PRODUCTION_FALLBACK === true) || (typeof __DEV__ !== 'boolean' || __DEV__ === false);
-    const candidates = uniq([
-      AppConfig?.DEVELOPMENT?.DEV_SERVER_URL,
-      'http://10.0.2.2:10000',
-      'http://127.0.0.1:10000',
-      'http://localhost:10000',
-      allowProd ? AppConfig?.PRODUCTION_SERVER_URL : null,
-    ]).map(u => u && u.replace(/\/$/, ''));
+    const candidates = [AppConfig.BASE_URL];
 
     for (const baseURL of candidates) {
       // Try new API with religion + subcategory first
@@ -2287,15 +2075,7 @@ React.useEffect(() => {
     try {
       // Page through docs in the default CATEGORY_KEY to find a matching image_url
       const limit = 100;
-      const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)));
-      const allowProd = (AppConfig?.DEVELOPMENT?.USE_PRODUCTION_FALLBACK === true) || (typeof __DEV__ !== 'boolean' || __DEV__ === false);
-      const candidates = uniq([
-        AppConfig?.DEVELOPMENT?.DEV_SERVER_URL,
-        'http://10.0.2.2:10000',
-        'http://127.0.0.1:10000',
-        'http://localhost:10000',
-        allowProd ? AppConfig?.PRODUCTION_SERVER_URL : null,
-      ]).map(u => u && u.replace(/\/$/, ''));
+      const candidates = [AppConfig.BASE_URL];
 
       for (const baseURL of candidates) {
         let pageNum = 1;
@@ -2708,7 +2488,6 @@ React.useEffect(() => {
   const [isCapturing, setIsCapturing] = useState(false);
   // Video overlay capture state and cache
   const [isOverlayCapture, setIsOverlayCapture] = useState(false);
-  const [currentVideoLocalUri, setCurrentVideoLocalUri] = useState(null);
   
   // Banner toggle state
   const [bannerEnabled, setBannerEnabled] = useState(false);
@@ -3459,6 +3238,9 @@ React.useEffect(() => {
       // If it's a video, composite overlays with FFmpeg then save
       if (isVideo && videoUrl) {
         try {
+          setIsProcessingVideo(true);
+          setVideoProcessingStatus('Preparing video for export...');
+          const source = await VideoDownloadService.getSource(currentTemplate);
           const { photos, texts, effectiveBannerUri } = buildVideoOverlayPayload();
 
           const hasOverlays = (photos && photos.length) || (texts && texts.length) || !!effectiveBannerUri;
@@ -3469,7 +3251,8 @@ React.useEffect(() => {
             setVideoProcessingStatus('Saving video with overlays...');
             try {
               const compositedPath = await VideoCompositeService.compositeVideo({
-              videoUrl,
+              videoUrl: source.remoteUrl,
+              localVideoUri: source.localUri,
               photos,
               texts,
               bannerUri: effectiveBannerUri,
@@ -3490,13 +3273,7 @@ React.useEffect(() => {
               setVideoProcessingStatus('');
             }
           } else {
-            // No overlays → fallback to saving original video
-            console.log('ℹ️ No overlays detected, saving original video.');
-            const RNFS = require('react-native-fs');
-            const timestamp = Date.now();
-            const downloadPath = `${RNFS.CachesDirectoryPath}/narayana_video_${timestamp}.mp4`;
-            const downloadResult = await RNFS.downloadFile({ fromUrl: videoUrl, toFile: downloadPath }).promise;
-            if (downloadResult.statusCode !== 200) throw new Error(`Download failed with status: ${downloadResult.statusCode}`);
+            const downloadPath = source.localUri;
             const savedUri = await CameraRoll.save(downloadPath, { type: 'video', album: 'Narayana Templates' });
             try { setSavedTemplateUri(savedUri); } catch {}
             return savedUri;
@@ -3505,6 +3282,9 @@ React.useEffect(() => {
         } catch (videoError) {
           console.error('❌ Video save failed:', videoError);
           throw new Error(`Failed to save video: ${videoError.message}`);
+        } finally {
+          setIsProcessingVideo(false);
+          setVideoProcessingStatus('');
         }
       }
       
@@ -3637,6 +3417,9 @@ React.useEffect(() => {
       // If it's a video, composite overlays with FFmpeg then share
       if (isVideo && videoUrl) {
         try {
+          setIsProcessingVideo(true);
+          setVideoProcessingStatus('Preparing video for export...');
+          const source = await VideoDownloadService.getSource(currentTemplate);
           const { photos, texts, effectiveBannerUri } = buildVideoOverlayPayload();
           const hasOverlays = (photos && photos.length) || (texts && texts.length) || !!effectiveBannerUri;
 
@@ -3647,7 +3430,8 @@ React.useEffect(() => {
             setVideoProcessingStatus('Processing video with overlays...');
             try {
               sharePath = await VideoCompositeService.compositeVideo({
-                videoUrl,
+                videoUrl: source.remoteUrl,
+              localVideoUri: source.localUri,
                 photos,
                 texts,
                 bannerUri: effectiveBannerUri,
@@ -3663,13 +3447,7 @@ React.useEffect(() => {
               setVideoProcessingStatus('');
             }
           } else {
-            // Fallback to original video
-            const RNFS = require('react-native-fs');
-            const timestamp = Date.now();
-            const filename = `narayana_video_${timestamp}.mp4`;
-            sharePath = `${RNFS.CachesDirectoryPath}/${filename}`;
-            const downloadResult = await RNFS.downloadFile({ fromUrl: videoUrl, toFile: sharePath }).promise;
-            if (downloadResult.statusCode !== 200) throw new Error(`Download failed: ${downloadResult.statusCode}`);
+            sharePath = source.localUri;
           }
 
           const fileUrl = sharePath.startsWith('file://') ? sharePath : `file://${sharePath}`;
@@ -3686,6 +3464,9 @@ React.useEffect(() => {
         } catch (videoError) {
           console.error('❌ Video share failed:', videoError);
           throw new Error(`Failed to share video: ${videoError.message}`);
+        } finally {
+          setIsProcessingVideo(false);
+          setVideoProcessingStatus('');
         }
       }
 
@@ -3873,7 +3654,7 @@ React.useEffect(() => {
       const isServerReachable = await backgroundRemovalService.testConnection();
       
       if (!isServerReachable) {
-        throw new Error('🚨 Background Removal Server Not Running!\n\nTo fix this:\n1. Open a terminal/command prompt\n2. Navigate to: D:\\Projects\\Narayana_App\\server\n3. Run: npm install (first time only)\n4. Run: npm run dev\n5. Keep the server running and try again\n\nThe server should start on http://localhost:10000 (default). On Android emulator, the app will use http://10.0.2.2:10000.');
+        throw new Error('Unable to reach the image processing server. Please try again later.');
       }
       
       // Process images in batch with progress tracking
@@ -4720,7 +4501,6 @@ onHandlerStateChange={({ nativeEvent }) => {
                               isCurrentVideo={index === currentReelIndex}
                               hideVideoForCapture={isOverlayCapture}
                               captureBgColor={isOverlayCapture ? '#00FF00' : 'transparent'}
-                              onCached={(uri) => { try { if (index === currentReelIndex) setCurrentVideoLocalUri(uri); } catch (e) {} }}
                             />
                           )}
                           pagingEnabled
@@ -4735,9 +4515,9 @@ onHandlerStateChange={({ nativeEvent }) => {
                             index,
                           })}
                           initialScrollIndex={currentReelIndex}
-                          initialNumToRender={5}
+                          initialNumToRender={3}
                           maxToRenderPerBatch={3}
-                          windowSize={11}
+                          windowSize={5}
                           removeClippedSubviews={false}
                           onScrollToIndexFailed={(info) => {
                             console.warn('🚨 Scroll to index failed:', info);

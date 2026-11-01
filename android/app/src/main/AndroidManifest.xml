@@ -31,12 +31,20 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
 
-        <!-- Deep Links for codebinary.in -->
+        <!-- Host and scheme come from the same environment as the JS bundle. -->
         <intent-filter android:autoVerify="true">
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.DEFAULT" />
             <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="codebinary.in" />
+            <data android:scheme="${appLinkScheme}" android:host="${appLinkHost}" />
+            <!-- Keep website pages, including account deletion, in the browser. -->
+            <data android:path="/" />
+            <data android:pathPrefix="/splash" />
+            <data android:pathPrefix="/edit" />
+            <data android:pathPrefix="/crop" />
+            <data android:pathPrefix="/banner-crop" />
+            <data android:pathPrefix="/profile" />
+            <data android:pathPrefix="/subscribe" />
         </intent-filter>
       </activity>
 

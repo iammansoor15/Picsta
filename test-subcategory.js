@@ -5,7 +5,7 @@
 
 const fetch = require('node-fetch');
 
-const BASE_URL = 'https://picstar-server.onrender.com';
+const BASE_URL = require('./scripts/app-env.cjs').readAppEnvironment().baseUrl;
 
 async function testSubcategory(subcategory) {
   try {

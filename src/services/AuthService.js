@@ -17,8 +17,7 @@ const base = () => {
   const prodAuth = AppConfig?.PRODUCTION_AUTH_SERVER_URL || AppConfig?.PRODUCTION_SERVER_URL;
   if (prodAuth) return String(prodAuth).replace(/\/$/, '');
 
-  // 4) Last resort - localhost default (useful for adb reverse or iOS sim)
-  return 'http://localhost:10000';
+  return AppConfig.BASE_URL;
 };
 
 const jsonHeaders = {

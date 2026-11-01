@@ -1,5 +1,4 @@
 import AppConfig from '../config/AppConfig';
-import { Platform } from 'react-native';
 
 class TemplateService {
   constructor() {
@@ -11,17 +10,9 @@ class TemplateService {
     console.log('📡 TemplateService initialized with baseURL:', this.baseURL);
   }
 
-  // Probe and select a working base URL (localhost/emulator/prod fallback)
+  // Probe the environment's backend.
   async _selectWorkingBase() {
-    const allowProd = (AppConfig?.DEVELOPMENT?.USE_PRODUCTION_FALLBACK === true) || (typeof __DEV__ !== 'boolean' || __DEV__ === false);
-    const candidates = [
-      AppConfig?.DEVELOPMENT?.DEV_SERVER_URL,
-      'http://192.168.1.64:10000',
-      'http://127.0.0.1:10000',
-      'http://localhost:10000',
-      'http://10.0.2.2:10000',
-      allowProd ? AppConfig?.PRODUCTION_SERVER_URL : null,
-    ].filter(Boolean).map(u => u.replace(/\/$/, ''));
+    const candidates = [AppConfig.BASE_URL];
 
     const test = async (url) => {
       const controller = new AbortController();
@@ -57,7 +48,7 @@ class TemplateService {
       } catch {}
     }
     // Fallback: keep existing or first candidate
-    this.baseURL = this.baseURL || candidates[0] || 'http://127.0.0.1:10000';
+    this.baseURL = this.baseURL || AppConfig.BASE_URL;
     return this.baseURL;
   }
 
@@ -73,14 +64,7 @@ class TemplateService {
       console.log('📤 TemplateService: Uploading template...', { category });
 
       // Probe candidates to select a working base URL (helps on device vs emulator)
-      const candidates = [
-        AppConfig?.PRODUCTION_SERVER_URL,
-        AppConfig?.DEVELOPMENT?.DEV_SERVER_URL,
-        'http://192.168.1.64:10000',
-        'http://127.0.0.1:10000',
-        'http://localhost:10000',
-        'http://10.0.2.2:10000',
-      ].filter(Boolean).map(u => u.replace(/\/$/, ''));
+      const candidates = [AppConfig.BASE_URL];
 
       const test = async (url) => {
         const controller = new AbortController();

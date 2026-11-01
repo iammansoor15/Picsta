@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import backgroundRemovalService from '../services/BackgroundRemovalService';
 import AppConfig from '../config/AppConfig';
 
-const PICSTAR_SERVER_URL = 'http://31.97.233.69:10000';
+const PICSTAR_SERVER_URL = AppConfig.BASE_URL;
 const STORAGE_KEY = 'SERVER_CONFIG';
 
 /**

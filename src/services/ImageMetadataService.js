@@ -1,29 +1,8 @@
 import AppConfig from '../config/AppConfig';
-import { Platform } from 'react-native';
 
 class ImageMetadataService {
   constructor() {
-    const devUrls = Platform.select({
-      android: ['http://192.168.1.64:10000', 'http://10.0.2.2:10000', 'http://127.0.0.1:10000', 'http://localhost:10000'],
-      ios: ['http://192.168.1.64:10000', 'http://127.0.0.1:10000', 'http://localhost:10000'],
-      default: [],
-    });
-
-    const candidates = [];
-    // Prefer explicit dev server first
-    if (AppConfig?.DEVELOPMENT?.DEV_SERVER_URL) {
-      candidates.push(`${AppConfig.DEVELOPMENT.DEV_SERVER_URL.replace(/\/$/, '')}`);
-    }
-    // Then platform-local development candidates
-    candidates.push(...devUrls);
-
-    // Only allow production as a fallback when explicitly enabled in dev, or when not in dev builds
-    const allowProd = (AppConfig?.DEVELOPMENT?.USE_PRODUCTION_FALLBACK === true) || (typeof __DEV__ !== 'boolean' || __DEV__ === false);
-    if (allowProd && AppConfig?.PRODUCTION_SERVER_URL) {
-      candidates.push(`${AppConfig.PRODUCTION_SERVER_URL.replace(/\/$/, '')}`);
-    }
-
-    this.candidates = candidates.filter((u, i) => u && candidates.indexOf(u) === i);
+    this.candidates = [AppConfig.BASE_URL];
     this.base = null; // will be picked by ensureBaseReady()
     this.probeTimeoutMs = 5000;
   }
@@ -54,8 +33,7 @@ class ImageMetadataService {
         return this.base;
       }
     }
-    // Fallback to first candidate or emulator default
-    this.base = this.candidates[0] || 'http://10.0.2.2:10000';
+    this.base = AppConfig.BASE_URL;
     console.warn('[ImageMetadataService] Falling back to base:', this.base);
     return this.base;
   }

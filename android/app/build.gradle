@@ -2,6 +2,17 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+def appEnvironment = { mode ->
+    def output = providers.exec {
+        workingDir rootProject.projectDir.parentFile
+        commandLine(System.getenv('NODE_BINARY') ?: 'node', 'scripts/app-env.cjs', '--mode', mode)
+    }.standardOutput.asText.get()
+    new groovy.json.JsonSlurper().parseText(output)
+}
+
+def debugEnvironment = appEnvironment('development')
+def releaseEnvironment = appEnvironment('production')
+
 react {
     autolinkLibrariesWithApp()
 }
@@ -21,8 +32,8 @@ android {
         applicationId "com.codebinary.winter"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 14
-        versionName "1.1.1"
+        versionCode 16
+        versionName "1.1.3"
         multiDexEnabled true
         buildConfigField("boolean", "IS_NEW_ARCHITECTURE_ENABLED", (findProperty("newArchEnabled") ?: "false").toString())
         buildConfigField("boolean", "IS_HERMES_ENABLED", (enableHermes).toString())
@@ -61,10 +72,12 @@ android {
 
     buildTypes {
         debug {
+            manifestPlaceholders = [appLinkHost: debugEnvironment.host, appLinkScheme: debugEnvironment.scheme]
             signingConfig signingConfigs.debug
             buildConfigField("boolean", "DEBUG", "true")
         }
         release {
+            manifestPlaceholders = [appLinkHost: releaseEnvironment.host, appLinkScheme: releaseEnvironment.scheme]
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             shrinkResources true

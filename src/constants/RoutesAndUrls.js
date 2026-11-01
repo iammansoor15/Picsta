@@ -15,9 +15,8 @@ export const ROUTES = {
 
 // Server URLs used by the app
 export const SERVER_URLS = {
-  PICSTAR: 'https://picstar-server.onrender.com',
-  // Preferred base URL - use production server as primary
-  PREFERRED_BASE: (AppConfig?.DEVELOPMENT?.DEV_SERVER_URL || AppConfig?.PRODUCTION_SERVER_URL || 'https://picstar-server.onrender.com'),
+  PICSTAR: AppConfig.BASE_URL,
+  PREFERRED_BASE: AppConfig.BASE_URL,
 };
 
 // Common backend endpoints

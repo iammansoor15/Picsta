@@ -30,6 +30,7 @@ import ReduxInitializer from './src/Components/ReduxInitializer';
 import NotificationService from './src/services/NotificationService';
 import { store } from './src/store';
 import { COLORS } from './src/theme';
+import AppConfig from './src/config/AppConfig';
 
 const Stack = createNativeStackNavigator();
 
@@ -77,8 +78,7 @@ export default function App() {
   // Handle deep linking or navigation actions
   const linking = {
     prefixes: [
-      'https://codebinary.in',
-      'http://codebinary.in',
+      AppConfig.BASE_URL,
     ],
     config: {
         screens: {

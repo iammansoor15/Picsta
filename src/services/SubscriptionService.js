@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import backgroundRemovalService from './BackgroundRemovalService';
+import AppConfig from '../config/AppConfig';
 
 // Support both old and new token keys
 const TOKEN_KEYS = ['authToken', 'AUTH_TOKEN'];
@@ -20,7 +21,7 @@ const getToken = async () => {
  */
 const getBaseUrl = () => {
   const config = backgroundRemovalService.getServerConfig();
-  return config?.baseUrl?.replace(/\/$/, '') || 'https://codebinary.in';
+  return config?.baseUrl?.replace(/\/$/, '') || AppConfig.BASE_URL;
 };
 
 /**

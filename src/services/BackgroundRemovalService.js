@@ -5,18 +5,6 @@ import ImageResizer from '@bam.tech/react-native-image-resizer';
 const CONFIG = {
   PRODUCTION_SERVER_URL: AppConfig.PRODUCTION_SERVER_URL,
   
-  DEFAULT_URLS: Platform.select({
-    android: [
-      'http://10.0.2.2:10000',       // Android emulator loopback
-      'http://localhost:10000',      // USB debugging with adb reverse
-      'http://127.0.0.1:10000',      // Localhost IP
-    ],
-    ios: [
-      'http://localhost:10000',      // Localhost for development
-      'http://127.0.0.1:10000'       // Localhost IP
-    ]
-  }),
-  
   // Current server URL (will be set dynamically or from config)
   SERVER_URL: null,
   
@@ -28,48 +16,15 @@ const CONFIG = {
   CONNECTION_TIMEOUT: 15000, // 15 seconds for connection testing
   MAX_RETRIES: 3,
   
-  // Get current server URLs (prefer dev candidates, optionally production)
+  // Respect an explicit ServerConfig override, then the environment.
   getServerUrls() {
-    const candidates = [];
-    // Explicitly configured server (e.g., after successful connectivity test)
-    if (this.SERVER_URL) {
-      candidates.push(this.SERVER_URL);
-    }
-    // Optional explicit dev URL from AppConfig if provided
-    if (AppConfig?.DEVELOPMENT?.DEV_SERVER_URL) {
-      const cleaned = AppConfig.DEVELOPMENT.DEV_SERVER_URL.replace(/\/$/, '');
-      candidates.push(cleaned);
-    }
-    // Platform defaults (development candidates)
-    const platformUrls = (this.DEFAULT_URLS && this.DEFAULT_URLS[Platform.OS]) ? this.DEFAULT_URLS[Platform.OS] : [];
-    candidates.push(...platformUrls);
-    // Production (fallback) — only if explicitly allowed for development
-    const allowProd = AppConfig?.DEVELOPMENT?.USE_PRODUCTION_FALLBACK === true;
-    if (allowProd && this.PRODUCTION_SERVER_URL) {
-      candidates.push(this.PRODUCTION_SERVER_URL.replace(/\/$/, ''));
-    }
-    // Deduplicate while preserving order
+    const candidates = [this.SERVER_URL, AppConfig.BASE_URL];
     return candidates.filter((u, i) => u && candidates.indexOf(u) === i);
   },
   
-  // Get current base URL (prefer explicit dev server; avoid production unless allowed)
+  // Get the configured server without trying unrelated hosts.
   getBaseUrl() {
-    if (this.SERVER_URL) {
-      return this.SERVER_URL;
-    }
-    if (AppConfig?.DEVELOPMENT?.DEV_SERVER_URL) {
-      return AppConfig.DEVELOPMENT.DEV_SERVER_URL.replace(/\/$/, '');
-    }
-    const platformUrls = (this.DEFAULT_URLS && this.DEFAULT_URLS[Platform.OS]) ? this.DEFAULT_URLS[Platform.OS] : [];
-    if (platformUrls.length > 0) {
-      return platformUrls[0];
-    }
-    const allowProd = AppConfig?.DEVELOPMENT?.USE_PRODUCTION_FALLBACK === true;
-    if (allowProd && this.PRODUCTION_SERVER_URL) {
-      return this.PRODUCTION_SERVER_URL;
-    }
-    // As a last resort, return whatever production URL is set (for release builds)
-    return this.PRODUCTION_SERVER_URL;
+    return this.SERVER_URL || AppConfig.BASE_URL;
   }
 };
 

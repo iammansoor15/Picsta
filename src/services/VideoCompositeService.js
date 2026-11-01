@@ -26,6 +26,9 @@ class VideoCompositeService {
    * on-device render fails and FALLBACK_TO_SERVER is enabled.
    */
   async compositeVideo(options) {
+    if (!options.videoUrl || /\.m3u8(?:[?#]|$)/i.test(options.videoUrl)) {
+      throw new Error('An MP4 source is required to save or share a video.');
+    }
     const useClientSide = AppConfig?.VIDEO_RENDERING?.USE_CLIENT_SIDE === true;
     const fallbackToServer = AppConfig?.VIDEO_RENDERING?.FALLBACK_TO_SERVER !== false;
 
@@ -491,8 +494,7 @@ class VideoCompositeService {
       return prodUrl.replace(/\/$/, '');
     }
 
-    // Fallback
-    return 'http://10.0.2.2:10000'; // Android emulator
+    return AppConfig.BASE_URL;
   }
 }
 

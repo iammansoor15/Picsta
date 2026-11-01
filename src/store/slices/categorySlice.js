@@ -132,14 +132,7 @@ export const fetchCategoriesFromServer = (forceRefresh = false) => async (dispat
     console.log('📂 CategorySlice: Fetching categories from server...');
 
     // Build server URL candidates
-    const allowProd = (AppConfig?.DEVELOPMENT?.USE_PRODUCTION_FALLBACK === true);
-    const candidates = [
-      AppConfig?.DEVELOPMENT?.DEV_SERVER_URL,
-      'http://10.0.2.2:10000',
-      'http://127.0.0.1:10000',
-      'http://localhost:10000',
-      allowProd ? AppConfig?.PRODUCTION_SERVER_URL : null,
-    ].filter(Boolean).map(u => u.replace(/\/$/, ''));
+    const candidates = [AppConfig.BASE_URL];
 
     let serverCategories = [];
     let success = false;

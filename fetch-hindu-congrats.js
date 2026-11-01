@@ -1,12 +1,8 @@
 // Standalone script to fetch Hindu congratulations templates
-// Works without React Native dependencies
+// Uses the app's build environment.
 
-const API_URLS = [
-  'http://31.97.233.69:10000/api/templates',
-  'http://192.168.1.64:10000/api/templates',
-  'http://127.0.0.1:10000/api/templates',
-  'http://localhost:10000/api/templates'
-];
+const { baseUrl } = require('./scripts/app-env.cjs').readAppEnvironment();
+const API_URLS = [`${baseUrl}/api/templates`];
 
 async function testApiUrl(url) {
   try {
